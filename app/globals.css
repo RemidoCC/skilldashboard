@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Instrument — design tokens
+
+   The governing idea: this is a device, not an app. Surfaces are flat, shadows
+   are hard offsets rather than blurs, and the single action colour is spent
+   sparingly. Nothing here uses a gradient.
+   ========================================================================== */
+
+:root {
+  --panel:  #E4E3DE;  /* main surface, warm industrial grey */
+  --recess: #D5D4CE;  /* inset areas holding controls */
+  --raised: #FFFFFF;  /* buttons and rows, hard 2px shadow below */
+  --screen: #14161A;  /* the display */
+  --ink:    #121212;
+  --muted:  #5C5B50;  /* see the contrast note below */
+  --signal: #FF4A00;  /* single action colour, for fills and marks */
+  --signal-text: #A32E00;  /* the same signal where it has to carry words */
+  --signal-fill: #A32E00;  /* primary button fill */
+  --on-signal:   #FFFFFF;  /* what sits on that fill */
+  --ok:     #B8E986;  /* on-screen only */
+  --edge:   #C4C3BD;  /* the hard shadow under raised elements */
+
+  /* Unlit dots on the display keep the grid visible. */
+  --dot-off: rgba(255, 255, 255, .07);
+  /* Unlit gauge ticks. A foreground mark, so not the shadow colour. */
+  --tick-off: #C4C3BD;
+  /* Ink as it reads on top of --screen. */
+  --screen-ink:   #E8E7E1;
+  --screen-muted: #7E8189;
+
+  --radius:    8px;
+  --radius-sm: 6px;
+  --radius-lg: 10px;
+}
+
+/* Contrast note.
+   The spec asks for --muted #7A7973 and --screen-muted #6E7178, and separately
+   for WCAG AA in both palettes. Those two cannot both hold: at 9-10px the
+   labels are normal text and need 4.5:1, and the given values reach only
+   3.40:1 on --panel and 2.94:1 on --recess. The muted tones here are the
+   nearest values that pass on every surface they are actually used on, and
+   --signal-text exists because --signal at 2.62:1 cannot carry a warning
+   sentence. --signal itself is unchanged and still does all the non-text work:
+   the dot matrix, the tier bar, lit ticks, the active tab mark.
+   tests/contrast.test.ts holds all of it. */
+
+/* Night palette. Applied by data-theme, which lib/theme.ts sets from local
+   sunset unless the user has overridden it. */
+:root[data-theme='night'] {
+  --panel:  #1A1B19;
+  --recess: #131412;
+  --raised: #232420;
+  --screen: #0E0F12;
+  --ink:    #EDECE6;
+  --muted:  #94938A;
+  --signal: #D94100;
+  --signal-text: #F26A32;
+  --signal-fill: #F26A32;
+  --on-signal:   #16170F;
+  --edge:   #0C0D0B;
+  --tick-off: #3A3B36;
+
+  --screen-ink:   #EDECE6;
+  --screen-muted: #7B7E85;
+}
+
+@theme inline {
+  --color-panel:  var(--panel);
+  --color-recess: var(--recess);
+  --color-raised: var(--raised);
+  --color-screen: var(--screen);
+  --color-ink:    var(--ink);
+  --color-muted:  var(--muted);
+  --color-signal: var(--signal);
+  --color-signal-text: var(--signal-text);
+  --color-signal-fill: var(--signal-fill);
+  --color-ok:     var(--ok);
+  --color-edge:   var(--edge);
+  --color-screen-ink:   var(--screen-ink);
+  --color-screen-muted: var(--screen-muted);
+
+  --radius-panel: var(--radius);
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+* {
+  /* Values are read, not admired. Every digit lines up in every column. */
+  font-variant-numeric: tabular-nums;
+}
+
+html {
+  background: var(--panel);
+  color-scheme: light;
+}
+:root[data-theme='night'] { color-scheme: dark; }
+
+body {
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  /* The bottom tab bar sits above the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Nothing italic, anywhere. */
+i, em, cite, address, dfn, var { font-style: normal; }
+
+/* -------------------------------------------------------------- utilities */
+
+/* Uppercase micro-label. The instrument labels everything it shows. */
+.label {
+  font-size: 9px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.label-lg { font-size: 10px; }
+
+/* A manufactured, raised control: flat fill, hard offset shadow, no blur. */
+.raised {
+  background: var(--raised);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 0 var(--edge);
+}
+
+/* An inset area that holds controls. */
+.recess {
+  background: var(--recess);
+  border-radius: var(--radius);
+}
+
+/* The display itself. */
+.screen {
+  background: var(--screen);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, .6);
+  color: var(--screen-ink);
+}
+
+/* Values are printed in 700. */
+.value { font-weight: 700; }
+
+/* ------------------------------------------------------------------ focus */
+
+/* Every interactive element shows where the keyboard is. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+.screen :where(a, button, input, [tabindex]):focus-visible {
+  outline-color: var(--ok);
+}
+
+/* Pressing a raised control drops it onto its shadow. */
+.raised:active:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 0 0 var(--edge);
+}
+
+/* ----------------------------------------------------------------- motion */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
