@@ -97,3 +97,23 @@ export function freezeToSpend(
   const before = resolveStreak(days, freezes, addDays(yesterday, -1));
   return before.days > 0 ? yesterday : null;
 }
+
+/**
+ * The completed week that has earned a freeze but not been given one, or null.
+ *
+ * A week only earns one if something actually happened in it — a freeze is a
+ * reward for a week of showing up, not for the calendar advancing.
+ */
+export function freezeToGrant(
+  entryDays: Iterable<string>,
+  freezes: readonly Freeze[],
+  currentWeekStart: string,
+): string | null {
+  const lastWeek = addDays(currentWeekStart, -7);
+  const days = entryDays instanceof Set ? entryDays : new Set(entryDays);
+
+  const workedThen = [...days].some((day) => day >= lastWeek && day < currentWeekStart);
+  if (!workedThen) return null;
+
+  return canGrantFreeze(freezes, lastWeek) ? lastWeek : null;
+}

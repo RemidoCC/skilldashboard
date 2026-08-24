@@ -257,6 +257,51 @@ export async function applyMutation(mutation: Mutation): Promise<MutationOutcome
       return error ? wobble(`Weekstand opslaan mislukte: ${error.message}`) : { ok: true };
     }
 
+    case 'quest.accept': {
+      const week = mutation.weekStart;
+      if (typeof week !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+        return bad('Ongeldige week.');
+      }
+      if (!Array.isArray(mutation.quests) || mutation.quests.length === 0) {
+        return bad('Geen opdrachten om over te nemen.');
+      }
+
+      // Taking over a set replaces whatever was already proposed for that
+      // week, so accepting twice cannot leave six quests standing. Anything
+      // already under way is left alone.
+      const { error: clearError } = await supabase
+        .from('quests')
+        .delete()
+        .eq('week_start', week)
+        .eq('progress', 0)
+        .is('completed_at', null);
+      if (clearError) return wobble(`Opdrachten vervangen mislukte: ${clearError.message}`);
+
+      const rows = [];
+      for (const quest of mutation.quests.slice(0, 3)) {
+        if (!isUuid(quest.skillId)) return bad('Ongeldige vaardigheid in een opdracht.');
+        const name = title(quest.title, 'Titel');
+        if (isFailure(name)) return name;
+        if (!Number.isInteger(quest.target) || quest.target < 1 || quest.target > 20) {
+          return bad('Doel van een opdracht ligt buiten bereik.');
+        }
+        if (!Number.isInteger(quest.bonusXp) || quest.bonusXp < 0 || quest.bonusXp > 500) {
+          return bad('Bonus van een opdracht ligt buiten bereik.');
+        }
+        rows.push({
+          user_id: user.id,
+          skill_id: quest.skillId,
+          title: name,
+          target: quest.target,
+          bonus_xp: quest.bonusXp,
+          week_start: week,
+        });
+      }
+
+      const { error } = await supabase.from('quests').insert(rows);
+      return error ? wobble(`Opdrachten opslaan mislukte: ${error.message}`) : { ok: true };
+    }
+
     default:
       return bad('Onbekende wijziging.');
   }

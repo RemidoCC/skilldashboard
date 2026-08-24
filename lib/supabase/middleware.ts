@@ -45,6 +45,10 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
+  // Cron routes carry their own bearer token instead of a session, so the
+  // session gate must let them through to be judged on that.
+  if (pathname.startsWith('/api/cron/')) return response;
+
   // The API answers with a status, never a redirect. fetch follows redirects
   // transparently, so a 307 to /login would come back as a 200 page and the
   // offline queue would take it for a successful write and drop the entry.

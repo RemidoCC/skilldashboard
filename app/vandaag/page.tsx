@@ -10,6 +10,10 @@ import { InstallPrompt } from '@/components/offline/InstallPrompt';
 import { TaskRow } from '@/components/vandaag/TaskRow';
 import { TimerTask } from '@/components/vandaag/TimerTask';
 import { QuickLog } from '@/components/vandaag/QuickLog';
+import { Quests } from '@/components/vandaag/Quests';
+import { Goals } from '@/components/vandaag/Goals';
+import { WeekReport } from '@/components/vandaag/WeekReport';
+import { FreezeNote } from '@/components/vandaag/FreezeNote';
 
 /** Reads live state on every visit; nothing here is worth caching. */
 export const dynamic = 'force-dynamic';
@@ -33,6 +37,15 @@ export default async function VandaagPage() {
         <SyncBar />
         <InstallPrompt />
 
+        {data.report ? (
+          <WeekReport
+            report={data.report}
+            candidates={data.questCandidates}
+            nextWeekStart={data.nextWeekStart}
+            reportKey={data.reportKey}
+          />
+        ) : null}
+
         <Instrument
           skills={data.skills}
           today={data.today}
@@ -41,6 +54,8 @@ export default async function VandaagPage() {
           serverXpToday={data.xpToday}
           streakDays={data.streakDays}
         />
+
+        <FreezeNote frozenDays={data.frozenDays} held={data.freezes.filter((f) => f.spentOn === null).length} />
 
         {/* ------------------------------------------------------ je drie -- */}
         <section className="mt-6" aria-labelledby="je-drie">
@@ -103,21 +118,24 @@ export default async function VandaagPage() {
 
         {/* ------------------------------------------------ quests en doelen -- */}
         <section className="mt-6" aria-labelledby="opdrachten">
-          <h2 id="opdrachten" className="label">
-            Opdrachten
-          </h2>
-          <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-            Weekopdrachten verschijnen hier zodra ze maandagochtend gezet worden.
-          </p>
+          <div className="flex items-baseline justify-between">
+            <h2 id="opdrachten" className="label">
+              Opdrachten
+            </h2>
+            {data.quests.length > 0 ? (
+              <span className="label">
+                {data.quests.filter((q) => q.completed).length} van {data.quests.length} af
+              </span>
+            ) : null}
+          </div>
+          <Quests quests={data.quests} skills={data.skills} />
         </section>
 
         <section className="mt-6" aria-labelledby="doelen">
           <h2 id="doelen" className="label">
             Doelen
           </h2>
-          <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-            Nog geen doelen. Je maakt ze aan in Beheer.
-          </p>
+          <Goals goals={data.goals} skills={data.skills} />
         </section>
       </main>
 

@@ -7,7 +7,25 @@ import { SyncBar } from '@/components/offline/SyncBar';
 import { TaskRow } from '@/components/vandaag/TaskRow';
 import { TimerTask } from '@/components/vandaag/TimerTask';
 import { QuickLog } from '@/components/vandaag/QuickLog';
-import { balanceSentence, seasonLabel, skills, streak, tasks, TODAY, xpToday } from '../fixtures';
+import { Quests } from '@/components/vandaag/Quests';
+import { Goals } from '@/components/vandaag/Goals';
+import { WeekReport } from '@/components/vandaag/WeekReport';
+import { FreezeNote } from '@/components/vandaag/FreezeNote';
+import {
+  balanceSentence,
+  frozenDays,
+  heldFreezes,
+  openGoals,
+  questCandidates,
+  quests,
+  seasonLabel,
+  skills,
+  streak,
+  tasks,
+  TODAY,
+  weekReport,
+  xpToday,
+} from '../fixtures';
 
 /**
  * Visual preview of Vandaag against fixture state, for checking the design
@@ -26,6 +44,13 @@ export default function DevVandaagPage() {
 
         <SyncBar />
 
+        <WeekReport
+          report={weekReport}
+          candidates={questCandidates}
+          nextWeekStart="2026-08-31"
+          reportKey="dev-preview"
+        />
+
         <Instrument
           skills={skills}
           today={TODAY}
@@ -34,6 +59,8 @@ export default function DevVandaagPage() {
           serverXpToday={xpToday}
           streakDays={streak}
         />
+
+        <FreezeNote frozenDays={frozenDays} held={heldFreezes} />
 
         <section className="mt-6" aria-labelledby="je-drie">
           <div className="flex items-baseline justify-between">
@@ -66,21 +93,22 @@ export default function DevVandaagPage() {
         </section>
 
         <section className="mt-6" aria-labelledby="opdrachten">
-          <h2 id="opdrachten" className="label">
-            Opdrachten
-          </h2>
-          <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-            Weekopdrachten verschijnen hier zodra ze maandagochtend gezet worden.
-          </p>
+          <div className="flex items-baseline justify-between">
+            <h2 id="opdrachten" className="label">
+              Opdrachten
+            </h2>
+            <span className="label">
+              {quests.filter((q) => q.completed).length} van {quests.length} af
+            </span>
+          </div>
+          <Quests quests={quests} skills={skills} />
         </section>
 
         <section className="mt-6" aria-labelledby="doelen">
           <h2 id="doelen" className="label">
             Doelen
           </h2>
-          <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-            Nog geen doelen. Je maakt ze aan in Beheer.
-          </p>
+          <Goals goals={openGoals} skills={skills} />
         </section>
       </main>
 

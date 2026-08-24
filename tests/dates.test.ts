@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, dayKey, daysBetween, weekStart } from '@/lib/domain/dates';
+import { addDays, dayKey, daysBetween, readableDay, weekStart } from '@/lib/domain/dates';
 
 describe('dayKey', () => {
   it('resolves an instant to the Amsterdam calendar day', () => {
@@ -57,5 +57,21 @@ describe('weekStart', () => {
     expect(weekStart('2026-08-26')).toBe('2026-08-24');
     expect(weekStart('2026-08-30')).toBe('2026-08-24'); // Sunday belongs to it
     expect(weekStart('2026-08-31')).toBe('2026-08-31');
+  });
+});
+
+describe('readableDay', () => {
+  it('spells the month out', () => {
+    expect(readableDay('2026-08-24')).toBe('24 augustus');
+  });
+
+  it('abbreviates and adds the year when asked', () => {
+    expect(readableDay('2026-03-02', true)).toBe('2 mrt 2026');
+  });
+
+  it('does not shift the day across a timezone', () => {
+    // Formatted in UTC from the day key, so the first of the month stays the first.
+    expect(readableDay('2026-01-01')).toBe('1 januari');
+    expect(readableDay('2026-12-31')).toBe('31 december');
   });
 });

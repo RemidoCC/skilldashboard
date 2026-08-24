@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   canGrantFreeze,
+  freezeToGrant,
   freezeToSpend,
   heldFreezes,
   MAX_HELD_FREEZES,
@@ -104,5 +105,35 @@ describe('freezeToSpend', () => {
     const days = ['2026-08-20', '2026-08-22'];
     const freezes = [freeze('2026-08-10', '2026-08-21'), freeze('2026-08-17')];
     expect(freezeToSpend(days, freezes, '2026-08-24')).toBe('2026-08-23');
+  });
+});
+
+describe('freezeToGrant', () => {
+  const week = '2026-08-24';
+
+  it('grants for a completed week that was worked', () => {
+    expect(freezeToGrant(['2026-08-19'], [], week)).toBe('2026-08-17');
+  });
+
+  it('grants nothing for a week where nothing happened', () => {
+    expect(freezeToGrant(['2026-08-25'], [], week)).toBeNull();
+  });
+
+  it('grants nothing twice for the same week', () => {
+    expect(freezeToGrant(['2026-08-19'], [freeze('2026-08-17')], week)).toBeNull();
+  });
+
+  it('grants nothing while three are already held', () => {
+    const three = [freeze('2026-07-27'), freeze('2026-08-03'), freeze('2026-08-10')];
+    expect(freezeToGrant(['2026-08-19'], three, week)).toBeNull();
+  });
+
+  it('grants again once one has been spent', () => {
+    const three = [freeze('2026-07-27', '2026-08-01'), freeze('2026-08-03'), freeze('2026-08-10')];
+    expect(freezeToGrant(['2026-08-19'], three, week)).toBe('2026-08-17');
+  });
+
+  it('ignores work from this week or older weeks', () => {
+    expect(freezeToGrant(['2026-08-24', '2026-08-01'], [], week)).toBeNull();
   });
 });

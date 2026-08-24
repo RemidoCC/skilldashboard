@@ -48,6 +48,7 @@ app/                    routes; /vandaag is the home screen
   api/completions/      completions in
   api/mutations/        edits from Beheer
   api/export/           the whole account as JSON
+  api/cron/             the scheduled jobs, behind a bearer token
   dev/                  visual preview against fixtures, 404s in production
 components/instrument/  the dot matrix, the meters, the display, the self-test
 components/vandaag/     task rows, timer, quick log
@@ -57,7 +58,8 @@ components/offline/     the queue provider, sync bar, install prompt
 lib/domain/             the rules — pure, dependency-free, fully tested
 lib/offline/            the IndexedDB queue and the optimistic fold
 lib/data/               row mapping and the Vandaag loader
-lib/server/             the write path both the endpoint and tests share
+lib/server/             the write path and the scheduled jobs
+vercel.json             the cron schedules
 public/sw.js            the service worker
 supabase/migrations/    schema, RLS, and the level functions
 supabase/tests/         harness that stands in for Supabase locally
@@ -120,6 +122,67 @@ the ledger by day with its notes, and the season badges earned.
 
 The trajectory replays the **whole** ledger, not just the window: a level on
 day one of the window depends on everything before it.
+
+## Rhythm
+
+**Quests.** Three a week, put on the board Monday morning. The bias is the
+whole design: a quest lands on a skill tied to an active goal, or on the one
+that has been quiet longest — a quest you would have completed anyway measures
+nothing. Targets are one more than the skill's recent weekly average, scaled by
+the week's capacity (`rustig` ×0.5, `gek` ×0.75) and clamped to 2–6.
+Generation is deterministic, so a job that runs twice cannot produce a
+different week.
+
+Progress lives inside `log_completion` rather than in the route handler,
+because the function already knows whether the ledger entry was really
+inserted — so a replayed offline completion advances a quest exactly once, and
+a finished quest pays its bonus exactly once.
+
+**Rust.** Decay costs one level per *episode* of neglect, not one level a day.
+A skill that has already rusted since it was last used is left alone until it
+is used again; without that check a fortnight away would quietly cost a
+fortnight of levels, which is the punishment the rule exists to avoid. Rust
+also never refreshes `last_active_at` — it is the system acting, not you
+showing up — and for the same reason it counts towards neither your streak nor
+the day's XP.
+
+**Freezes.** Earned once per completed week that was actually worked, at most
+three held. Spent on the day that would otherwise have broken the streak, and
+the day it covered is named on the screen: a freeze that quietly saved a run
+would make it read as unbroken effort.
+
+**The Sunday report** is computed when it is asked for rather than stored — it
+derives entirely from the ledger, so a live one can never be stale. It is on
+offer from Sunday 18:00 through Monday, because a report you can only see on
+Sunday evening is a report you will miss. It states what came in against last
+week, what levelled, what rusted or is close, the balance sentence, and the
+three quests the coming week would ask, each swappable before you take them
+over.
+
+**Seasons.** Twelve weeks. At the end the badge is derived from what actually
+happened — `hersteld` when a skill climbed back from rust, `toegespitst` when
+one skill took over half, `evenwichtig` when none passed 40% — and the tally
+goes into `seasons.summary`. Levels and floors carry over; only quests reset.
+
+**Goal proposals** are scaffolding, not insight. There is no model reading the
+goal, so the app offers the shape most goals need — regular work, a weekly
+step, preparation, a look back — sized to what the skill's existing tasks
+already use, and never heavier. Every line is editable, every line can be
+thrown out, and nothing reaches the database until it is confirmed.
+
+### Scheduled jobs
+
+`vercel.json` runs two, both idempotent:
+
+| Route | When | Does |
+| --- | --- | --- |
+| `/api/cron/daily` | 02:00 daily | rust, freeze grant, freeze spend |
+| `/api/cron/weekly` | 02:00 Monday | season rollover, then the week's quests |
+
+Both need `CRON_SECRET` (Vercel sends it as a bearer token) and
+`SUPABASE_SERVICE_ROLE_KEY` — a cron run has no session, so it cannot go
+through RLS the way a request does. Without either, the route refuses and says
+which one is missing.
 
 ## Offline
 
@@ -205,7 +268,8 @@ none of this can drift.
 - [x] **Phase 3 — Beheer and Historie.** Tasks, skills, goals and settings with
       full CRUD; level trajectories, the day log and season badges. Every edit
       queues offline like a completion.
-- [ ] Phase 4 — Quests, capacity, rust, freezes, Sunday report, seasons
+- [x] **Phase 4 — Rhythm.** Quests, rust, freezes, the Sunday report, seasons,
+      goal proposals and the two cron jobs.
 - [ ] Phase 5 — Google Calendar and Gmail
 
 Rust and freeze storage were open after phase 1 and are now settled — see
@@ -218,11 +282,14 @@ their tests are already in place so that phase is not blocked.
 On the production build, throttled mobile: performance 99, accessibility 100,
 best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 — Lighthouse dropped its PWA category in v12, so those are checked directly
-against what Chromium actually requires.
+against what Chromium actually requires. Both offline suites pass (13 checks on
+Vandaag, 10 on Beheer), and the cron routes refuse an unsigned call.
 
-Two things are **not** verified end to end. Signing in needs a magic link sent
-to a real mailbox, so the authenticated round trip — queue drains, server
-awards XP, page refreshes — is covered at the unit level (idempotency against
-real Postgres, worker/page request-body parity) rather than through the UI. And
-the install has not been tried on a physical phone; the criteria are checked,
-the tap is not.
+Three things are **not** verified end to end. Signing in needs a magic link sent
+to a real mailbox, so the authenticated round trip — queue drains, server awards
+XP, page refreshes — is covered at the unit level (idempotency against real
+Postgres, worker/page request-body parity) rather than through the UI. The
+install has not been tried on a physical phone; the criteria are checked, the
+tap is not. And the scheduled jobs have been exercised through their pure
+decisions and their SQL, not by a real Vercel cron firing against real data —
+that needs the deployment and the two secrets.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyRust, GRACE_DAYS, rustState, rustXpDelta } from '@/lib/domain/rust';
+import { applyRust, GRACE_DAYS, rustState, rustXpDelta, shouldRust } from '@/lib/domain/rust';
+import type { LogEntry, Skill } from '@/lib/domain/types';
 import { applyXp, rebuild, xpNeeded } from '@/lib/domain/curve';
 
 describe('GRACE_DAYS', () => {
@@ -106,5 +107,82 @@ describe('rustXpDelta', () => {
     const earned = rebuild(gains);
     const decay = rustXpDelta(earned);
     expect(rebuild([...gains, decay])).toEqual(applyRust(earned));
+  });
+});
+
+describe('shouldRust', () => {
+  function skill(over: Partial<Skill> = {}): Skill {
+    return {
+      id: 'a',
+      name: 'Werk',
+      subtitle: null,
+      color: '#000',
+      glyph: 'square',
+      level: 6,
+      xp: 0,
+      floorLevel: 0,
+      lastActiveAt: '2026-08-14T10:00:00.000Z',
+      active: true,
+      sortOrder: 1,
+      ...over,
+    };
+  }
+
+  function rustEntry(at: string): LogEntry {
+    return {
+      id: 'r1',
+      skillId: 'a',
+      taskId: null,
+      title: 'roest',
+      xp: -100,
+      minutes: null,
+      note: null,
+      source: 'rust',
+      createdAt: at,
+    };
+  }
+
+  it('is due once the grace period is spent', () => {
+    expect(shouldRust(skill(), [], '2026-08-24', 'normaal')).toBe(true);
+  });
+
+  it('is not due inside the grace period', () => {
+    expect(shouldRust(skill(), [], '2026-08-20', 'normaal')).toBe(false);
+  });
+
+  it('is not due for a skill that is switched off', () => {
+    expect(shouldRust(skill({ active: false }), [], '2026-08-24', 'normaal')).toBe(false);
+  });
+
+  it('is not due for a skill that was never used', () => {
+    expect(shouldRust(skill({ lastActiveAt: null }), [], '2026-08-24', 'normaal')).toBe(false);
+  });
+
+  it('costs one level per episode, not one a day', () => {
+    // Already rusted after the last time it was used, so it waits.
+    const entries = [rustEntry('2026-08-24T02:00:00.000Z')];
+    expect(shouldRust(skill(), entries, '2026-08-25', 'normaal')).toBe(false);
+    expect(shouldRust(skill(), entries, '2026-09-30', 'normaal')).toBe(false);
+  });
+
+  it('is due again once the skill has been used since it last rusted', () => {
+    const entries = [rustEntry('2026-08-10T02:00:00.000Z')];
+    // Used on the 14th, which is after that rust, so a new episode can start.
+    expect(shouldRust(skill(), entries, '2026-08-24', 'normaal')).toBe(true);
+  });
+
+  it('is not due for a skill sitting on an earned floor', () => {
+    expect(shouldRust(skill({ level: 5, floorLevel: 5 }), [], '2026-08-24', 'normaal')).toBe(false);
+  });
+
+  it('is not due at level one', () => {
+    expect(shouldRust(skill({ level: 1 }), [], '2026-08-24', 'normaal')).toBe(false);
+  });
+
+  it('follows the week capacity', () => {
+    // Ten days quiet: past a normal grace, inside a quiet one.
+    expect(shouldRust(skill(), [], '2026-08-24', 'normaal')).toBe(true);
+    expect(shouldRust(skill(), [], '2026-08-24', 'rustig')).toBe(false);
+    expect(shouldRust(skill(), [], '2026-08-24', 'gek')).toBe(false);
   });
 });

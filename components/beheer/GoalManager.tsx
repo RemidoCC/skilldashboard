@@ -3,12 +3,25 @@
 import { useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
-import type { Skill } from '@/lib/domain/types';
+import { GoalProposalFlow } from './GoalProposals';
+import type { Skill, Task } from '@/lib/domain/types';
 import type { Goal } from '@/lib/offline/mutations';
 
-export function GoalManager({ skills, goals }: { skills: Skill[]; goals: Goal[] }) {
+export function GoalManager({
+  skills,
+  goals,
+  tasks,
+  weekStart,
+}: {
+  skills: Skill[];
+  goals: Goal[];
+  tasks: Task[];
+  weekStart: string;
+}) {
   const { mutate } = useOffline();
   const [creating, setCreating] = useState(false);
+  // Set the moment a goal is created, so its proposals can be offered.
+  const [proposingFor, setProposingFor] = useState<{ title: string; skill: Skill } | null>(null);
   const active = skills.filter((s) => s.active);
   const byId = new Map(skills.map((s) => [s.id, s]));
 
@@ -103,8 +116,22 @@ export function GoalManager({ skills, goals }: { skills: Skill[]; goals: Goal[] 
         })}
       </ul>
 
-      {creating ? (
-        <GoalCreator skills={active} onDone={() => setCreating(false)} />
+      {proposingFor ? (
+        <GoalProposalFlow
+          goalTitle={proposingFor.title}
+          skill={proposingFor.skill}
+          existingValues={tasks
+            .filter((t) => t.skillId === proposingFor.skill.id && !t.archived)
+            .map((t) => t.value)}
+          weekStart={weekStart}
+          onDone={() => setProposingFor(null)}
+        />
+      ) : creating ? (
+        <GoalCreator
+          skills={active}
+          onCreated={(title, skill) => setProposingFor({ title, skill })}
+          onDone={() => setCreating(false)}
+        />
       ) : (
         <div className="mt-3 flex justify-end">
           <button
@@ -119,15 +146,19 @@ export function GoalManager({ skills, goals }: { skills: Skill[]; goals: Goal[] 
         </div>
       )}
 
-      <p className="mt-2 text-[12px]" style={{ color: 'var(--muted)' }}>
-        Een nieuw doel stelt straks zelf drie tot vijf taken en een weekopdracht voor. Dat komt in
-        fase 4; tot dan maak je de taken zelf aan.
-      </p>
     </section>
   );
 }
 
-function GoalCreator({ skills, onDone }: { skills: Skill[]; onDone: () => void }) {
+function GoalCreator({
+  skills,
+  onDone,
+  onCreated,
+}: {
+  skills: Skill[];
+  onDone: () => void;
+  onCreated: (title: string, skill: Skill) => void;
+}) {
   const { mutate } = useOffline();
   const [title, setTitle] = useState('');
   const [skillId, setSkillId] = useState(skills[0]?.id ?? '');
@@ -146,7 +177,12 @@ function GoalCreator({ skills, onDone }: { skills: Skill[]; onDone: () => void }
       id: crypto.randomUUID(),
       goal: { skillId, title: trimmed, targetDate: targetDate === '' ? null : targetDate },
     });
+
     onDone();
+    // The goal exists; what it suggests is offered next, and confirmed
+    // separately.
+    const skill = skills.find((s) => s.id === skillId);
+    if (skill) onCreated(trimmed, skill);
   }
 
   return (

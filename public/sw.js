@@ -217,6 +217,8 @@ function describeMutation(mutation) {
       return 'Verwijderd doel';
     case 'week.capacity':
       return 'Weekinstelling';
+    case 'quest.accept':
+      return 'Opdrachten voor volgende week';
     default:
       return 'Wijziging';
   }

@@ -46,3 +46,14 @@ export function weekStart(key: string): string {
   const isoDow = date.getUTCDay() === 0 ? 7 : date.getUTCDay();
   return addDays(key, 1 - isoDow);
 }
+
+/** 24 augustus, not 2026-08-24 — a report reads in words. */
+export function readableDay(day: string, withYear = false): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return new Intl.DateTimeFormat('nl-NL', {
+    day: 'numeric',
+    month: withYear ? 'short' : 'long',
+    ...(withYear && { year: 'numeric' }),
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}

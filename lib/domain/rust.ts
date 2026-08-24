@@ -1,6 +1,6 @@
 import { applyXp, xpNeeded } from './curve';
-import { daysBetween } from './dates';
-import type { Capacity, Progress } from './types';
+import { dayKey, daysBetween } from './dates';
+import type { Capacity, LogEntry, Progress, Skill } from './types';
 
 /**
  * Rust is a decay, not a punishment. A skill left alone starts rusting after a
@@ -74,4 +74,36 @@ export function applyRust(progress: Progress): Progress {
   if (delta === 0) return { ...progress, level: Math.max(progress.floorLevel, 1, progress.level) };
   const next = applyXp(progress, delta);
   return { level: next.level, xp: next.xp, floorLevel: next.floorLevel };
+}
+
+/**
+ * Whether a skill is due to rust right now.
+ *
+ * The second condition is the one that keeps rust from being a punishment:
+ * decay costs one level per episode of neglect, not one level a day. A skill
+ * that has already rusted since it was last used is left where it is until it
+ * is used again — otherwise a fortnight away would quietly cost a fortnight of
+ * levels.
+ */
+export function shouldRust(
+  skill: Skill,
+  entries: readonly LogEntry[],
+  today: string,
+  capacity: Capacity,
+): boolean {
+  if (!skill.active || skill.lastActiveAt === null) return false;
+
+  if (rustState(dayKey(skill.lastActiveAt), today, capacity).status !== 'rusting') return false;
+
+  const rustedSinceLastUse = entries.some(
+    (entry) =>
+      entry.skillId === skill.id &&
+      entry.source === 'rust' &&
+      skill.lastActiveAt !== null &&
+      entry.createdAt > skill.lastActiveAt,
+  );
+  if (rustedSinceLastUse) return false;
+
+  // Zero means the skill sits on an earned floor, or on level one.
+  return rustXpDelta({ level: skill.level, xp: skill.xp, floorLevel: skill.floorLevel }) !== 0;
 }

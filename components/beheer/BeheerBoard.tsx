@@ -23,7 +23,12 @@ export function BeheerBoard({ server, weekStart }: { server: BeheerState; weekSt
     <div className="space-y-8">
       <TaskManager skills={state.skills} tasks={state.tasks} />
       <SkillManager skills={state.skills} />
-      <GoalManager skills={state.skills} goals={state.goals} />
+      <GoalManager
+        skills={state.skills}
+        goals={state.goals}
+        tasks={state.tasks}
+        weekStart={weekStart}
+      />
 
       <section aria-labelledby="koppelingen">
         <h2 id="koppelingen" className="label">

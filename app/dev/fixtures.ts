@@ -195,3 +195,75 @@ export const historie = {
     },
   ],
 };
+
+/* --------------------------------------------------------------- fase 4 -- */
+
+export const quests = [
+  {
+    id: 'q1',
+    skillId: skills[3].id,
+    title: '3 keer Gezondheid',
+    target: 3,
+    progress: 1,
+    bonusXp: 60,
+    completed: false,
+  },
+  {
+    id: 'q2',
+    skillId: skills[1].id,
+    title: '4 keer Remido',
+    target: 4,
+    progress: 4,
+    bonusXp: 80,
+    completed: true,
+  },
+  {
+    id: 'q3',
+    skillId: skills[2].id,
+    title: '2 keer Gezin',
+    target: 2,
+    progress: 0,
+    bonusXp: 40,
+    completed: false,
+  },
+];
+
+export const openGoals = goals
+  .filter((g) => !g.done)
+  .map((g) => ({ id: g.id, skillId: g.skillId, title: g.title, progress: g.progress }));
+
+export const questCandidates = [
+  { skillId: skills[3].id, title: '3 keer Gezondheid', target: 3, bonusXp: 60, weekStart: '2026-08-31' },
+  { skillId: skills[1].id, title: '4 keer Remido', target: 4, bonusXp: 80, weekStart: '2026-08-31' },
+  { skillId: skills[2].id, title: '2 keer Gezin', target: 2, bonusXp: 40, weekStart: '2026-08-31' },
+  { skillId: skills[0].id, title: '5 keer Werk', target: 5, bonusXp: 100, weekStart: '2026-08-31' },
+];
+
+export const weekReport = {
+  weekStart: '2026-08-24',
+  weekEnd: '2026-08-30',
+  skills: [
+    { skillId: skills[0].id, name: 'Werk', color: skills[0].color, xp: 420, previousXp: 300, levelsGained: 1 },
+    { skillId: skills[1].id, name: 'Remido', color: skills[1].color, xp: 264, previousXp: 330, levelsGained: 0 },
+    { skillId: skills[2].id, name: 'Gezin', color: skills[2].color, xp: 75, previousXp: 75, levelsGained: 0 },
+    { skillId: skills[3].id, name: 'Gezondheid', color: skills[3].color, xp: 24, previousXp: 96, levelsGained: 0 },
+  ],
+  totalXp: 783,
+  previousTotalXp: 801,
+  levelled: [{ name: 'Werk', from: 6, to: 7 }],
+  rust: [
+    {
+      skillId: skills[3].id,
+      name: 'Gezondheid',
+      status: 'rusting' as const,
+      daysInactive: 12,
+      daysUntilRust: 0,
+      rusted: true,
+    },
+  ],
+  balanceSentence: 'Werk nam 68 procent van je XP in twee weken, Gezondheid 4 procent.',
+  proposedQuests: questCandidates.slice(0, 3),
+};
+
+export const frozenDays = ['2026-08-21'];
+export const heldFreezes = 2;

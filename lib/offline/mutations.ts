@@ -16,7 +16,15 @@ export type Mutation =
   | { kind: 'goal.create'; id: string; goal: NewGoal }
   | { kind: 'goal.update'; id: string; patch: GoalPatch }
   | { kind: 'goal.delete'; id: string }
-  | { kind: 'week.capacity'; weekStart: string; capacity: Capacity };
+  | { kind: 'week.capacity'; weekStart: string; capacity: Capacity }
+  | { kind: 'quest.accept'; weekStart: string; quests: AcceptedQuest[] };
+
+export interface AcceptedQuest {
+  skillId: string;
+  title: string;
+  target: number;
+  bonusXp: number;
+}
 
 export interface NewTask {
   skillId: string;
@@ -217,6 +225,11 @@ export function applyMutations(
       }
       case 'week.capacity': {
         capacity = mutation.capacity;
+        break;
+      }
+      case 'quest.accept': {
+        // Quests are not part of the Beheer state this fold describes; the
+        // Vandaag screen reads them from the server after the queue drains.
         break;
       }
     }

@@ -168,6 +168,8 @@ export function describeMutation(mutation: Mutation): string {
       return 'Verwijderd doel';
     case 'week.capacity':
       return 'Weekinstelling';
+    case 'quest.accept':
+      return 'Opdrachten voor volgende week';
   }
 }
 

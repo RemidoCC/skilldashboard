@@ -1,5 +1,6 @@
 import { Sparkline } from './Sparkline';
 import { WINDOW_DAYS } from '@/lib/domain/trajectory';
+import { readableDay } from '@/lib/domain/dates';
 import type { LogDay, SkillTrajectory } from '@/lib/domain/trajectory';
 import type { Tables } from '@/lib/db/database.types';
 
@@ -19,17 +20,6 @@ const SOURCE_LABELS: Record<string, string> = {
   quest: 'opdracht',
   rust: 'roest',
 };
-
-/** 24 augustus, not 2026-08-24 — a diary reads in words. */
-function readableDay(day: string, withYear = false): string {
-  const [y, m, d] = day.split('-').map(Number);
-  return new Intl.DateTimeFormat('nl-NL', {
-    day: 'numeric',
-    month: withYear ? 'short' : 'long',
-    ...(withYear && { year: 'numeric' }),
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(y, m - 1, d)));
-}
 
 /**
  * What the window did to a level.
