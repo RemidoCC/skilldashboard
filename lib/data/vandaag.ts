@@ -4,8 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { toCapacity, toLogEntry, toSkill, toTask } from './map';
 import { addDays, dayKey, weekStart } from '@/lib/domain/dates';
 import { balanceSignal } from '@/lib/domain/balance';
-import { levelFraction } from '@/lib/domain/curve';
-import { rustState, type RustState } from '@/lib/domain/rust';
+import { nearestToRust, readMeters, type MeterReading } from '@/lib/domain/meters';
 import { statusLines } from '@/lib/domain/status';
 import { daysFromEntries, streakDays } from '@/lib/domain/streak';
 import { tierFor, totalLevel } from '@/lib/domain/tier';
@@ -14,18 +13,14 @@ import type { Capacity, LogEntry, Skill, Task } from '@/lib/domain/types';
 /** How far back the streak walk needs to look. */
 const HISTORY_DAYS = 90;
 
-export interface MeterReading {
-  skill: Skill;
-  fraction: number;
-  rust: RustState;
-}
-
 export interface VandaagData {
   today: string;
   capacity: Capacity;
   skills: Skill[];
   tasks: Task[];
   meters: MeterReading[];
+  /** Kept so the client can rebuild the status line over queued writes. */
+  balanceSentence: string | null;
   tier: ReturnType<typeof tierFor>;
   statusLines: string[];
   streakDays: number;
@@ -67,25 +62,14 @@ export async function loadVandaag(): Promise<VandaagData> {
   const entries = (entriesRes.data ?? []).map(toLogEntry);
   const capacity = toCapacity(weekRes.data?.capacity);
 
-  const activeSkills = skills.filter((s) => s.active);
   const todayEntries = entries.filter((e) => dayKey(e.createdAt) === today);
   // Decay is not something you did today, so it stays out of the day's total.
   const xpToday = todayEntries
     .filter((e) => e.source !== 'rust')
     .reduce((sum, e) => sum + e.xp, 0);
 
-  const meters: MeterReading[] = activeSkills.map((skill) => ({
-    skill,
-    fraction: levelFraction(skill),
-    rust: rustState(skill.lastActiveAt ? dayKey(skill.lastActiveAt) : null, today, capacity),
-  }));
-
-  // The status line reports the skill nearest to rusting, and prefers one that
-  // has already started over one that is merely close.
-  const nearest = [...meters]
-    .filter((m) => m.skill.lastActiveAt !== null)
-    .sort((a, b) => a.rust.daysUntilRust - b.rust.daysUntilRust || b.rust.daysInactive - a.rust.daysInactive)[0];
-
+  const meters: MeterReading[] = readMeters(skills, today, capacity);
+  const nearest = nearestToRust(meters);
   const balance = balanceSignal(skills, entries, today);
 
   return {
@@ -95,6 +79,7 @@ export async function loadVandaag(): Promise<VandaagData> {
     tasks,
     meters,
     tier: tierFor(totalLevel(skills)),
+    balanceSentence: balance.sentence,
     streakDays: streakDays(daysFromEntries(entries), today),
     xpToday,
     todayEntries,

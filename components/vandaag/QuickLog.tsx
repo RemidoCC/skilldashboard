@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { quickLog } from '@/lib/actions/log';
-import { completed as feedbackCompleted, leveledUp } from '@/lib/feedback';
+import { useState } from 'react';
+import { useOffline } from '@/components/offline/OfflineProvider';
+import { completed as feedbackCompleted } from '@/lib/feedback';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
+import { withStreakBonus } from '@/lib/domain/xp';
 import type { Skill } from '@/lib/domain/types';
 
 const MIN = 5;
@@ -11,8 +12,8 @@ const MAX = 150;
 const STEP = 5;
 
 /** Records something that was never on the list: text, a skill, a value. */
-export function QuickLog({ skills }: { skills: Skill[] }) {
-  const [pending, startTransition] = useTransition();
+export function QuickLog({ skills, streakDays }: { skills: Skill[]; streakDays: number }) {
+  const { record } = useOffline();
   const [title, setTitle] = useState('');
   const [skillId, setSkillId] = useState(skills[0]?.id ?? '');
   const [xp, setXp] = useState(20);
@@ -20,31 +21,36 @@ export function QuickLog({ skills }: { skills: Skill[] }) {
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState<string | null>(null);
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
     setConfirmed(null);
 
-    startTransition(async () => {
-      const result = await quickLog({
-        entryId: crypto.randomUUID(),
-        skillId,
-        title,
-        xp,
-        note,
-      });
+    const trimmed = title.trim();
+    if (trimmed === '') {
+      setError('Geef kort op wat je gedaan hebt.');
+      return;
+    }
 
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
+    // Provisional, as everywhere: the server recomputes it on arrival.
+    const provisional = withStreakBonus(xp, streakDays);
+    feedbackCompleted();
 
-      feedbackCompleted();
-      if (result.leveledUp) leveledUp();
-      setConfirmed(`${result.xp} XP genoteerd.`);
-      setTitle('');
-      setNote('');
+    await record({
+      id: crypto.randomUUID(),
+      kind: 'quick',
+      skillId,
+      title: trimmed,
+      xp: provisional,
+      taskId: null,
+      minutes: null,
+      note: note.trim() === '' ? null : note.trim(),
+      occurredAt: new Date().toISOString(),
     });
+
+    setConfirmed(`${provisional} XP genoteerd.`);
+    setTitle('');
+    setNote('');
   }
 
   if (skills.length === 0) {
@@ -127,11 +133,10 @@ export function QuickLog({ skills }: { skills: Skill[] }) {
         {/* Primary action, lower right. */}
         <button
           type="submit"
-          disabled={pending}
           className="raised h-11 px-5 text-[13px]"
           style={{ background: 'var(--signal-fill)', color: 'var(--on-signal)' }}
         >
-          {pending ? 'Bezig' : 'Noteer'}
+          Noteer
         </button>
       </div>
 

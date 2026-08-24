@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState, useTransition } from 'react';
-import { completeTask } from '@/lib/actions/log';
-import { completed as feedbackCompleted, leveledUp } from '@/lib/feedback';
+import { useCallback, useEffect, useState } from 'react';
+import { useOffline } from '@/components/offline/OfflineProvider';
+import { completed as feedbackCompleted } from '@/lib/feedback';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
 import { NoteField } from './NoteField';
-import { timerXp } from '@/lib/domain/xp';
+import { earnedXp, timerXp } from '@/lib/domain/xp';
 import type { Skill, Task } from '@/lib/domain/types';
 
 const KEY_PREFIX = 'skillunit.timer.';
@@ -42,13 +42,20 @@ function clock(seconds: number): string {
  * mid-session and coming back later picks the same session up rather than
  * losing it.
  */
-export function TimerTask({ task, skill }: { task: Task; skill: Skill }) {
-  const [pending, startTransition] = useTransition();
+export function TimerTask({
+  task,
+  skill,
+  streakDays,
+}: {
+  task: Task;
+  skill: Skill;
+  streakDays: number;
+}) {
+  const { record } = useOffline();
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [note, setNote] = useState('');
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Recover a session that was running before the page was reloaded.
   useEffect(() => {
@@ -83,30 +90,32 @@ export function TimerTask({ task, skill }: { task: Task; skill: Skill }) {
     writeStart(task.id, null);
   }, [task.id]);
 
-  function stop() {
+  async function stop() {
     if (startedAt === null) return;
-    const minutes = Math.round((Date.now() - startedAt) / 60000);
-    setError(null);
+    const startedFrom = startedAt;
+    const minutes = Math.round((Date.now() - startedFrom) / 60000);
+
     setStartedAt(null);
     setElapsed(0);
     writeStart(task.id, null);
     feedbackCompleted();
 
-    startTransition(async () => {
-      const result = await completeTask({
-        entryId: crypto.randomUUID(),
-        taskId: task.id,
-        minutes,
-        note,
-      });
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      if (result.leveledUp) leveledUp();
-      setNote('');
-      setOpen(false);
+    await record({
+      id: crypto.randomUUID(),
+      kind: 'task',
+      skillId: skill.id,
+      title: task.title,
+      // Provisional; the server recomputes it from the streak it sees.
+      xp: earnedXp({ kind: 'timer', value: task.value, minutes }, streakDays),
+      taskId: task.id,
+      minutes,
+      note: note.trim() === '' ? null : note.trim(),
+      // The session ended now, but it started earlier; the ledger records the end.
+      occurredAt: new Date().toISOString(),
     });
+
+    setNote('');
+    setOpen(false);
   }
 
   const running = startedAt !== null;
@@ -135,7 +144,6 @@ export function TimerTask({ task, skill }: { task: Task; skill: Skill }) {
             <button
               type="button"
               onClick={stop}
-              disabled={pending}
               className="recess h-11 min-w-11 shrink-0 px-3 text-[12px]"
               style={{ color: 'var(--signal-text)' }}
             >
@@ -146,7 +154,6 @@ export function TimerTask({ task, skill }: { task: Task; skill: Skill }) {
           <button
             type="button"
             onClick={start}
-            disabled={pending}
             aria-label={`Timer starten voor ${task.title}`}
             className="recess h-11 min-w-11 shrink-0 px-3 text-[12px]"
           >
@@ -171,11 +178,6 @@ export function TimerTask({ task, skill }: { task: Task; skill: Skill }) {
         </button>
       )}
 
-      {error ? (
-        <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }} role="alert">
-          {error}
-        </p>
-      ) : null}
     </li>
   );
 }

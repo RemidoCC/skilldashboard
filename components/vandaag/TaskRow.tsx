@@ -1,42 +1,45 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { completeTask } from '@/lib/actions/log';
-import { completed as feedbackCompleted, leveledUp } from '@/lib/feedback';
+import { useState } from 'react';
+import { useOffline } from '@/components/offline/OfflineProvider';
+import { completed as feedbackCompleted } from '@/lib/feedback';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
 import { NoteField } from './NoteField';
+import { earnedXp } from '@/lib/domain/xp';
 import type { Skill, Task } from '@/lib/domain/types';
 
-/** A check task: one tap to record it, with an optional line of text. */
-export function TaskRow({ task, skill }: { task: Task; skill: Skill }) {
-  const [pending, startTransition] = useTransition();
+/**
+ * A check task: one tap to record it, with an optional line of text.
+ *
+ * The tap never waits on the network. It writes to the queue, the meters move
+ * straight away, and the server's authoritative XP arrives on the next
+ * refresh.
+ */
+export function TaskRow({ task, skill, streakDays }: { task: Task; skill: Skill; streakDays: number }) {
+  const { record } = useOffline();
   const [note, setNote] = useState('');
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  function record() {
-    setError(null);
-    // Optimistic: the row reports done before the network answers.
+  async function tap() {
     setDone(true);
     feedbackCompleted();
 
-    startTransition(async () => {
-      const result = await completeTask({
-        entryId: crypto.randomUUID(),
-        taskId: task.id,
-        note,
-      });
-
-      if (!result.ok) {
-        setDone(false);
-        setError(result.error);
-        return;
-      }
-      if (result.leveledUp) leveledUp();
-      setNote('');
-      setOpen(false);
+    await record({
+      id: crypto.randomUUID(),
+      kind: 'task',
+      skillId: skill.id,
+      title: task.title,
+      // Provisional: the server recomputes this from the streak it sees.
+      xp: earnedXp({ kind: 'check', value: task.value }, streakDays),
+      taskId: task.id,
+      minutes: null,
+      note: note.trim() === '' ? null : note.trim(),
+      occurredAt: new Date().toISOString(),
     });
+
+    setNote('');
+    setOpen(false);
   }
 
   return (
@@ -55,8 +58,8 @@ export function TaskRow({ task, skill }: { task: Task; skill: Skill }) {
 
         <button
           type="button"
-          onClick={record}
-          disabled={pending || done}
+          onClick={tap}
+          disabled={done}
           aria-label={`${task.title} afvinken`}
           className="recess grid h-11 w-11 shrink-0 place-items-center"
           style={{
@@ -75,7 +78,7 @@ export function TaskRow({ task, skill }: { task: Task; skill: Skill }) {
         </button>
       </div>
 
-      {open ? (
+      {done ? null : open ? (
         <NoteField id={`note-${task.id}`} value={note} onChange={setNote} />
       ) : (
         <button
@@ -86,12 +89,6 @@ export function TaskRow({ task, skill }: { task: Task; skill: Skill }) {
           Notitie toevoegen
         </button>
       )}
-
-      {error ? (
-        <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }} role="alert">
-          {error}
-        </p>
-      ) : null}
     </li>
   );
 }

@@ -6,6 +6,9 @@ import type { Database } from '@/lib/db/database.types';
 const PUBLIC_PATHS = [
   '/login',
   '/auth',
+  // The offline shell has to render without a session: the worker serves it
+  // when there is no network to check one against.
+  '/offline',
   // The visual preview used for design review and screenshots. The route
   // itself 404s outside development, so this never opens anything in a
   // deployed build.
@@ -41,6 +44,16 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+  // The API answers with a status, never a redirect. fetch follows redirects
+  // transparently, so a 307 to /login would come back as a 200 page and the
+  // offline queue would take it for a successful write and drop the entry.
+  if (!user && pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { ok: false, error: 'Je sessie is verlopen. Log opnieuw in.', retryable: false },
+      { status: 401 },
+    );
+  }
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

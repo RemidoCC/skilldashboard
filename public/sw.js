@@ -1,0 +1,240 @@
+/*
+ * Skill Unit service worker.
+ *
+ * Hand-rolled rather than generated: the app has exactly three caching needs
+ * and one background job, and a build plugin would hide all four behind
+ * configuration.
+ *
+ * Bump VERSION to retire every old cache at once.
+ */
+const VERSION = 'v2';
+const SHELL_CACHE = `skillunit-shell-${VERSION}`;
+const PAGE_CACHE = `skillunit-pages-${VERSION}`;
+const ASSET_CACHE = `skillunit-assets-${VERSION}`;
+
+const OFFLINE_URL = '/offline';
+const SHELL = [OFFLINE_URL, '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
+
+/* The queue, shared with the page. Kept in raw IndexedDB because a worker
+ * cannot pull in a helper library. Must stay in step with lib/offline/types.ts. */
+const DB_NAME = 'skillunit';
+const DB_VERSION = 2;
+const QUEUE_STORE = 'pending-completions';
+const FAILURE_STORE = 'failed-completions';
+const SYNC_TAG = 'skillunit-completions';
+const SYNC_CHANNEL = 'skillunit-sync';
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(SHELL_CACHE)
+      .then((cache) => cache.addAll(SHELL))
+      .then(() => self.skipWaiting()),
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  const keep = new Set([SHELL_CACHE, PAGE_CACHE, ASSET_CACHE]);
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) => Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n))))
+      .then(() => self.clients.claim()),
+  );
+});
+
+/* Signing out has to take the cached personal pages with it. */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'clear-caches') {
+    event.waitUntil(caches.keys().then((names) => Promise.all(names.map((n) => caches.delete(n)))));
+  }
+});
+
+function isStaticAsset(url) {
+  return url.pathname.startsWith('/_next/static/') || url.pathname.startsWith('/icons/');
+}
+
+/* Immutable, content-hashed: serve from cache and never revalidate. */
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const hit = await cache.match(request);
+  if (hit) return hit;
+
+  const response = await fetch(request);
+  if (response.ok) cache.put(request, response.clone());
+  return response;
+}
+
+/* Pages are personal and change constantly, so the network wins when it can
+ * and the last good copy stands in when it cannot. */
+async function networkFirst(request) {
+  const cache = await caches.open(PAGE_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch {
+    const hit = await cache.match(request);
+    if (hit) return hit;
+
+    const shell = await caches.open(SHELL_CACHE);
+    const offline = await shell.match(OFFLINE_URL);
+    return offline ?? Response.error();
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+
+  // Writes go straight to the network. When they fail the queue already holds
+  // them, so there is nothing here to retry or cache.
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  // Auth callbacks and the write endpoint must never be served from a cache.
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return;
+
+  if (isStaticAsset(url)) {
+    event.respondWith(cacheFirst(request, ASSET_CACHE));
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
+  }
+});
+
+/* ------------------------------------------------------------ background -- */
+
+function openQueue() {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(DB_NAME, DB_VERSION);
+    open.onupgradeneeded = () => {
+      const database = open.result;
+      if (!database.objectStoreNames.contains(QUEUE_STORE)) {
+        const store = database.createObjectStore(QUEUE_STORE, { keyPath: 'id' });
+        store.createIndex('occurredAt', 'occurredAt');
+      }
+      if (!database.objectStoreNames.contains(FAILURE_STORE)) {
+        database.createObjectStore(FAILURE_STORE, { keyPath: 'id' });
+      }
+    };
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error);
+  });
+}
+
+function readAll(database) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(QUEUE_STORE, 'readonly');
+    const request = tx.objectStore(QUEUE_STORE).index('occurredAt').getAll();
+    request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/* A write that can never succeed is parked, not discarded. The worker usually
+ * runs with no page open, so a message would go nowhere and the user would
+ * never learn that something they logged was thrown away. */
+function park(database, item, message) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(FAILURE_STORE, 'readwrite');
+    tx.objectStore(FAILURE_STORE).put({
+      id: item.id,
+      title: item.title,
+      message,
+      occurredAt: item.occurredAt,
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function messageFrom(response) {
+  try {
+    const body = await response.json();
+    if (body && typeof body.error === 'string') return body.error;
+  } catch {
+    // Fall through to the default.
+  }
+  return 'Deze registratie kon niet worden opgeslagen.';
+}
+
+function remove(database, id) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(QUEUE_STORE, 'readwrite');
+    tx.objectStore(QUEUE_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* Must produce the same body as lib/offline/types.ts toRequestBody. */
+function toBody(item) {
+  return item.kind === 'task'
+    ? {
+        kind: 'task',
+        entryId: item.id,
+        taskId: item.taskId,
+        minutes: item.minutes === null ? undefined : item.minutes,
+        note: item.note === null ? undefined : item.note,
+        occurredAt: item.occurredAt,
+      }
+    : {
+        kind: 'quick',
+        entryId: item.id,
+        skillId: item.skillId,
+        title: item.title,
+        xp: item.xp,
+        note: item.note === null ? undefined : item.note,
+        occurredAt: item.occurredAt,
+      };
+}
+
+async function drainQueue() {
+  const database = await openQueue();
+  const items = await readAll(database);
+  let sent = 0;
+  let parked = 0;
+
+  for (const item of items) {
+    let response;
+    try {
+      response = await fetch('/api/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(toBody(item)),
+        credentials: 'same-origin',
+      });
+    } catch {
+      // Still offline. Throwing keeps the sync registration alive so the
+      // browser tries again later.
+      throw new Error('offline');
+    }
+
+    if (response.ok) {
+      await remove(database, item.id);
+      sent += 1;
+      continue;
+    }
+
+    // 4xx can never land: park it so the next page load can report it.
+    if (response.status >= 400 && response.status < 500) {
+      await park(database, item, await messageFrom(response));
+      await remove(database, item.id);
+      parked += 1;
+      continue;
+    }
+
+    // 5xx: leave it queued and try again later.
+  }
+
+  if ((sent > 0 || parked > 0) && typeof BroadcastChannel !== 'undefined') {
+    new BroadcastChannel(SYNC_CHANNEL).postMessage({ type: 'drained', sent, parked });
+  }
+}
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === SYNC_TAG) event.waitUntil(drainQueue());
+});

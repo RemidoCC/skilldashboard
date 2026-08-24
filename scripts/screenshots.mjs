@@ -48,4 +48,22 @@ for (const page of pages) {
   }
 }
 
+/* The offline state is part of the product now, so it gets captured too. */
+for (const theme of themes) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const tab = await context.newPage();
+  await tab.goto(`${BASE}/dev/vandaag?theme=${theme}`, { waitUntil: 'networkidle' });
+  await tab.waitForTimeout(1400);
+
+  await context.setOffline(true);
+  await tab.getByRole('button', { name: 'Offerte afmaken afvinken' }).click();
+  await tab.waitForTimeout(900);
+
+  await tab.addStyleTag({ content: HIDE_NAV });
+  const name = `vandaag-offline-${theme === 'day' ? 'dag' : 'nacht'}`;
+  await tab.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
+  console.log(name);
+  await context.close();
+}
+
 await browser.close();

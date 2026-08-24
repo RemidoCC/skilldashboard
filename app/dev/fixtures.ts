@@ -1,7 +1,3 @@
-import { levelFraction } from '@/lib/domain/curve';
-import { rustState } from '@/lib/domain/rust';
-import { statusLines } from '@/lib/domain/status';
-import { tierFor, totalLevel } from '@/lib/domain/tier';
 import type { Skill, Task } from '@/lib/domain/types';
 
 /**
@@ -9,7 +5,7 @@ import type { Skill, Task } from '@/lib/domain/types';
  * easy to get wrong: a two-digit display, a skill mid-level, a skill sitting on
  * an earned floor, and one that has started rusting.
  */
-const TODAY = '2026-08-24';
+export const TODAY = '2026-08-24';
 
 function at(daysAgo: number): string {
   const [y, m, d] = TODAY.split('-').map(Number);
@@ -101,25 +97,8 @@ export const tasks: Task[] = [
   },
 ];
 
-export const meters = skills.map((skill) => ({
-  skill,
-  fraction: levelFraction(skill),
-  rust: rustState(skill.lastActiveAt!.slice(0, 10), TODAY, 'normaal'),
-}));
-
-export const tier = tierFor(totalLevel(skills));
-
-export const lines = statusLines({
-  xpToday: 145,
-  balanceSentence: 'Werk nam 68 procent van je XP in twee weken, Gezondheid 4 procent.',
-  quests: { total: 3, completed: 1 },
-  rust: {
-    name: 'Gezondheid',
-    daysInactive: 12,
-    daysUntilRust: 0,
-    status: 'rusting',
-  },
-});
-
+export const xpToday = 145;
+export const balanceSentence =
+  'Werk nam 68 procent van je XP in twee weken, Gezondheid 4 procent.';
 export const streak = 6;
 export const seasonLabel = 'S02 · W07';

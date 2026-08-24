@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { IBM_Plex_Mono } from 'next/font/google';
 import { SelfTestProvider } from '@/components/instrument/SelfTest';
+import { OfflineProvider } from '@/components/offline/OfflineProvider';
+import { ServiceWorkerRegistrar } from '@/components/offline/ServiceWorkerRegistrar';
 import { themeBoot } from '@/lib/theme';
 import './globals.css';
 
@@ -15,6 +17,20 @@ export const metadata: Metadata = {
   title: 'Skill Unit',
   description: 'Meetinstrument voor wat je werkelijk doet.',
   applicationName: 'Skill Unit',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Skill Unit',
+    // iOS has no dark variant here, and the panel reads correctly either way.
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: [
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
+  },
 };
 
 export const viewport: Viewport = {
@@ -38,7 +54,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className={plexMono.variable}>
-        <SelfTestProvider>{children}</SelfTestProvider>
+        <SelfTestProvider>
+          <OfflineProvider>{children}</OfflineProvider>
+        </SelfTestProvider>
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

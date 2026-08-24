@@ -28,6 +28,10 @@ npm run dev
 | `npm test` | Full suite. SQL suites skip unless `TEST_DATABASE_URL` is set |
 | `npm run db:setup` | Provisions a local Postgres, applies the migrations, prints the URL |
 | `npm run db:types` | Regenerates `lib/db/database.types.ts` |
+| `npm run build:verify` / `start:verify` | Production build on port 3100, in its own `.next-prod` so it does not tread on a running dev server |
+| `npm run verify:offline` | Drives the app in a browser with the network cut |
+| `npm run verify:pwa` | Checks the installability criteria one by one |
+| `npm run screenshots` / `icons` | Regenerates `docs/screenshots/` and the app icons |
 
 To include the SQL parity suites:
 
@@ -40,12 +44,16 @@ npm test
 
 ```
 app/                    routes; /vandaag is the home screen
+  api/completions/      the single write endpoint
   dev/                  visual preview against fixtures, 404s in production
 components/instrument/  the dot matrix, the meters, the display, the self-test
 components/vandaag/     task rows, timer, quick log
+components/offline/     the queue provider, sync bar, install prompt
 lib/domain/             the rules — pure, dependency-free, fully tested
+lib/offline/            the IndexedDB queue and the optimistic fold
 lib/data/               row mapping and the Vandaag loader
-lib/actions/            server actions that write completions
+lib/server/             the write path both the endpoint and tests share
+public/sw.js            the service worker
 supabase/migrations/    schema, RLS, and the level functions
 supabase/tests/         harness that stands in for Supabase locally
 ```
@@ -88,6 +96,37 @@ entry and advances the skill in one call. The client supplies the entry id, so
 a mutation replayed after a reconnect lands exactly once — which is what the
 offline queue in phase 2 will depend on.
 
+## Offline
+
+Completing a task never waits on the network. Every write goes into an
+IndexedDB queue first and is sent second; the meters and the display move
+immediately, folded from the same domain functions the server will run, so an
+offline completion reads exactly as it will once it lands.
+
+Writes go through `POST /api/completions` rather than a server action,
+because the service worker has to be able to replay them and a worker can
+replay a fetch but not a server action. The client supplies the entry id, and
+`log_completion` ignores a second insert of the same one, so replay is always
+safe.
+
+Three details that took a second pass:
+
+- **The API answers with a status, never a redirect.** An unauthenticated
+  `POST` used to 307 to `/login`; `fetch` follows redirects, so the queue saw
+  a 200 HTML page, counted it a success and deleted the write. The middleware
+  now returns 401 JSON for anything under `/api/`.
+- **Failures are parked, not broadcast.** A write that can never succeed goes
+  into a second store and stays there until the user dismisses it. The worker
+  usually drains the queue with no page open, so a message would reach nobody
+  — and reading destructively meant a remount could swallow the only notice.
+- **A freeze protects a streak, it does not start one.** The first cut walked
+  back through history spending held freezes on any gap it met, which turned
+  three freezes and one logged day into a four-day streak.
+
+`npm run verify:offline` drives all of it in a real browser: cut the network,
+complete a task, reload, reconnect, and check that a permanently failed write
+is reported rather than lost.
+
 ## Design
 
 The full system lives in `app/globals.css`. Flat surfaces, hard 2px offset
@@ -129,7 +168,8 @@ none of this can drift.
 
 - [x] **Phase 1 — Foundation.** Schema, RLS, auth, design tokens, Vandaag with
       check-off, timers, quick log, the dot matrix and the meters.
-- [ ] Phase 2 — PWA and offline writes
+- [x] **Phase 2 — PWA and offline.** Manifest, icons, service worker, offline
+      shell, IndexedDB write queue with background replay, install prompt.
 - [ ] Phase 3 — Beheer and Historie
 - [ ] Phase 4 — Quests, capacity, rust, freezes, Sunday report, seasons
 - [ ] Phase 5 — Google Calendar and Gmail
@@ -138,3 +178,17 @@ Rust and freeze storage were open after phase 1 and are now settled — see
 [The rules](#the-rules). The mechanics themselves (the decay job, the weekly
 grant, the Sunday report) land in phase 4; the schema, the domain functions and
 their tests are already in place so that phase is not blocked.
+
+### Measured
+
+On the production build, throttled mobile: performance 99, accessibility 100,
+best practices 100. Every installability criterion passes (`npm run verify:pwa`)
+— Lighthouse dropped its PWA category in v12, so those are checked directly
+against what Chromium actually requires.
+
+Two things are **not** verified end to end. Signing in needs a magic link sent
+to a real mailbox, so the authenticated round trip — queue drains, server
+awards XP, page refreshes — is covered at the unit level (idempotency against
+real Postgres, worker/page request-body parity) rather than through the UI. And
+the install has not been tried on a physical phone; the criteria are checked,
+the tap is not.

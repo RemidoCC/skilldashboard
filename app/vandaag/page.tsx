@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/supabase/server';
 import { loadVandaag } from '@/lib/data/vandaag';
-import { Display } from '@/components/instrument/Display';
-import { Meter } from '@/components/instrument/Meter';
 import { Header } from '@/components/shell/Header';
 import { BottomNav } from '@/components/shell/BottomNav';
+import { Instrument } from '@/components/vandaag/Instrument';
+import { Meters } from '@/components/vandaag/Meters';
+import { SyncBar } from '@/components/offline/SyncBar';
+import { InstallPrompt } from '@/components/offline/InstallPrompt';
 import { TaskRow } from '@/components/vandaag/TaskRow';
 import { TimerTask } from '@/components/vandaag/TimerTask';
 import { QuickLog } from '@/components/vandaag/QuickLog';
@@ -28,9 +30,17 @@ export default async function VandaagPage() {
       <main className="mx-auto max-w-md px-4 pb-24">
         <Header seasonLabel={data.seasonLabel} />
 
-        <div className="mt-3">
-          <Display tier={data.tier} statusLines={data.statusLines} streakDays={data.streakDays} />
-        </div>
+        <SyncBar />
+        <InstallPrompt />
+
+        <Instrument
+          skills={data.skills}
+          today={data.today}
+          capacity={data.capacity}
+          balanceSentence={data.balanceSentence}
+          serverXpToday={data.xpToday}
+          streakDays={data.streakDays}
+        />
 
         {/* ------------------------------------------------------ je drie -- */}
         <section className="mt-6" aria-labelledby="je-drie">
@@ -61,9 +71,14 @@ export default async function VandaagPage() {
                 const skill = skillsById.get(task.skillId);
                 if (!skill) return null;
                 return task.kind === 'timer' ? (
-                  <TimerTask key={task.id} task={task} skill={skill} />
+                  <TimerTask
+                    key={task.id}
+                    task={task}
+                    skill={skill}
+                    streakDays={data.streakDays}
+                  />
                 ) : (
-                  <TaskRow key={task.id} task={task} skill={skill} />
+                  <TaskRow key={task.id} task={task} skill={skill} streakDays={data.streakDays} />
                 );
               })}
             </ul>
@@ -72,7 +87,10 @@ export default async function VandaagPage() {
 
         {/* --------------------------------------------------- snel loggen -- */}
         <section className="mt-6" aria-label="Snel loggen">
-          <QuickLog skills={data.skills.filter((s) => s.active)} />
+          <QuickLog
+            skills={data.skills.filter((s) => s.active)}
+            streakDays={data.streakDays}
+          />
         </section>
 
         {/* --------------------------------------------------------- meters -- */}
@@ -80,25 +98,7 @@ export default async function VandaagPage() {
           <h2 id="meters" className="label">
             Vaardigheden
           </h2>
-          {data.meters.length === 0 ? (
-            <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-              Geen actieve vaardigheden. Zet er minstens één aan in Beheer.
-            </p>
-          ) : (
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {data.meters.map(({ skill, fraction, rust }) => (
-                <Meter
-                  key={skill.id}
-                  name={skill.name}
-                  glyph={skill.glyph}
-                  color={skill.color}
-                  level={skill.level}
-                  fraction={fraction}
-                  rusting={rust.status !== 'ok'}
-                />
-              ))}
-            </div>
-          )}
+          <Meters skills={data.skills} today={data.today} capacity={data.capacity} />
         </section>
 
         {/* ------------------------------------------------ quests en doelen -- */}

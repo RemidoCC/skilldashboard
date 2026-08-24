@@ -1,12 +1,13 @@
 import { notFound } from 'next/navigation';
-import { Display } from '@/components/instrument/Display';
-import { Meter } from '@/components/instrument/Meter';
+import { Instrument } from '@/components/vandaag/Instrument';
+import { Meters } from '@/components/vandaag/Meters';
 import { Header } from '@/components/shell/Header';
 import { BottomNav } from '@/components/shell/BottomNav';
+import { SyncBar } from '@/components/offline/SyncBar';
 import { TaskRow } from '@/components/vandaag/TaskRow';
 import { TimerTask } from '@/components/vandaag/TimerTask';
 import { QuickLog } from '@/components/vandaag/QuickLog';
-import { lines, meters, seasonLabel, skills, streak, tasks, tier } from '../fixtures';
+import { balanceSentence, seasonLabel, skills, streak, tasks, TODAY, xpToday } from '../fixtures';
 
 /**
  * Visual preview of Vandaag against fixture state, for checking the design
@@ -23,9 +24,16 @@ export default function DevVandaagPage() {
       <main className="mx-auto max-w-md px-4 pb-24">
         <Header seasonLabel={seasonLabel} />
 
-        <div className="mt-3">
-          <Display tier={tier} statusLines={lines} streakDays={streak} />
-        </div>
+        <SyncBar />
+
+        <Instrument
+          skills={skills}
+          today={TODAY}
+          capacity="normaal"
+          balanceSentence={balanceSentence}
+          serverXpToday={xpToday}
+          streakDays={streak}
+        />
 
         <section className="mt-6" aria-labelledby="je-drie">
           <div className="flex items-baseline justify-between">
@@ -38,35 +46,23 @@ export default function DevVandaagPage() {
             {tasks.map((task) => {
               const skill = skillsById.get(task.skillId)!;
               return task.kind === 'timer' ? (
-                <TimerTask key={task.id} task={task} skill={skill} />
+                <TimerTask key={task.id} task={task} skill={skill} streakDays={streak} />
               ) : (
-                <TaskRow key={task.id} task={task} skill={skill} />
+                <TaskRow key={task.id} task={task} skill={skill} streakDays={streak} />
               );
             })}
           </ul>
         </section>
 
         <section className="mt-6" aria-label="Snel loggen">
-          <QuickLog skills={skills} />
+          <QuickLog skills={skills} streakDays={streak} />
         </section>
 
         <section className="mt-6" aria-labelledby="meters">
           <h2 id="meters" className="label">
             Vaardigheden
           </h2>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {meters.map(({ skill, fraction, rust }) => (
-              <Meter
-                key={skill.id}
-                name={skill.name}
-                glyph={skill.glyph}
-                color={skill.color}
-                level={skill.level}
-                fraction={fraction}
-                rusting={rust.status !== 'ok'}
-              />
-            ))}
-          </div>
+          <Meters skills={skills} today={TODAY} capacity="normaal" />
         </section>
 
         <section className="mt-6" aria-labelledby="opdrachten">
