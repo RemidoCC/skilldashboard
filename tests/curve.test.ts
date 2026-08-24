@@ -58,8 +58,39 @@ describe('applyXp', () => {
     expect(applyXp(held, 10).floorLevel).toBe(5);
   });
 
-  it('never lets XP go negative', () => {
-    expect(applyXp({ level: 3, xp: 10, floorLevel: 0 }, -50)).toMatchObject({ level: 3, xp: 0 });
+  it('walks down a level when a negative gain overdraws the current one', () => {
+    // 10 - 50 = -40, so it borrows level 2 back and lands 40 short of its top.
+    expect(applyXp({ level: 3, xp: 10, floorLevel: 0 }, -50)).toMatchObject({
+      level: 2,
+      xp: xpNeeded(2) - 40,
+    });
+  });
+
+  it('walks down several levels at once', () => {
+    expect(applyXp({ level: 4, xp: 0, floorLevel: 0 }, -(xpNeeded(3) + xpNeeded(2)))).toMatchObject({
+      level: 2,
+      xp: 0,
+    });
+  });
+
+  it('stops at level one rather than going under', () => {
+    expect(applyXp({ level: 2, xp: 0, floorLevel: 0 }, -99999)).toMatchObject({
+      level: 1,
+      xp: 0,
+    });
+  });
+
+  it('a gain and its exact negative cancel out', () => {
+    const start = { level: 4, xp: 217, floorLevel: 0 };
+    const up = applyXp(start, 640);
+    const back = applyXp({ level: up.level, xp: up.xp, floorLevel: up.floorLevel }, -640);
+    expect(back).toMatchObject({ level: start.level, xp: start.xp });
+  });
+
+  it('does not give back a floor once it has been earned', () => {
+    const earned = applyXp({ level: 5, xp: 0, floorLevel: 5 }, -1);
+    expect(earned.level).toBe(4);
+    expect(earned.floorLevel).toBe(5);
   });
 
   it('rejects a non-integer gain', () => {

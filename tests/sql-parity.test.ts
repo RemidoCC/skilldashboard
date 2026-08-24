@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { rebuild, xpNeeded } from '@/lib/domain/curve';
+import { applyRust, rustXpDelta } from '@/lib/domain/rust';
 
 /**
  * The level curve exists twice: once in TypeScript and once in SQL. If they
@@ -57,6 +58,13 @@ run('SQL and TypeScript agree on the level curve', () => {
       100, 303, 580, 919, 1313, 1758, 2250, 2786, 3363, 3981,
     ],
     'ramping gains': Array.from({ length: 30 }, (_, i) => 137 + i * 11),
+    // Rust lives in the ledger as a negative entry, so the replay has to walk
+    // levels downward as faithfully as it walks them up.
+    'a rust entry after climbing': [100, 303, 580, 919, 1313, -(0 + 1313)],
+    'rust taken mid-level': [2000, -500],
+    'rust deeper than one level': [3000, -2500],
+    'rust below level one is absorbed': [50, -400],
+    'earning back after rust': [1902, -1313, 800, 900],
   };
 
   for (const [label, gains] of Object.entries(scenarios)) {
@@ -113,6 +121,57 @@ run('SQL and TypeScript agree on the level curve', () => {
     const second = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
 
     expect(second.rows[0]).toEqual(first.rows[0]);
+  });
+
+  it('replays a rust entry to the same state the domain computes', async () => {
+    const { rows } = await db.query<{ id: string }>(
+      `insert into public.skills (user_id, name, glyph) values ($1, 'ruster', 'square') returning id`,
+      [userId],
+    );
+    const skillId = rows[0].id;
+
+    // These are xp_needed(1..6) exactly, so the climb lands on level 7 with
+    // nothing left over. Then take exactly one level of decay.
+    const climb = [100, 303, 580, 919, 1313, 1758];
+    const earned = rebuild(climb);
+    const decay = rustXpDelta(earned);
+    expect(decay).toBeLessThan(0);
+
+    await db.query(
+      `insert into public.log_entries (user_id, skill_id, title, xp, source, created_at)
+       select $1, $2, 'g', g, case when g < 0 then 'rust' else 'manual' end,
+              timestamptz '2026-01-01 00:00:00Z' + (ord * interval '1 minute')
+         from unnest($3::int[]) with ordinality as t(g, ord)`,
+      [userId, skillId, [...climb, decay]],
+    );
+    await db.query(`select public.recalculate_levels($1)`, [userId]);
+
+    const after = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
+    const expected = applyRust(earned);
+    expect({
+      level: after.rows[0].level,
+      xp: after.rows[0].xp,
+      floorLevel: after.rows[0].floor_level,
+    }).toEqual(expected);
+    // Level 7 down to 6, and the floor earned at 5 holds.
+    expect(after.rows[0].level).toBe(6);
+    expect(after.rows[0].floor_level).toBe(5);
+  });
+
+  it('never lets a rust entry drive a skill below level one', async () => {
+    const { rows } = await db.query<{ id: string }>(
+      `insert into public.skills (user_id, name, glyph) values ($1, 'bottom', 'square') returning id`,
+      [userId],
+    );
+    const skillId = rows[0].id;
+    await db.query(
+      `insert into public.log_entries (user_id, skill_id, title, xp, source, created_at)
+       values ($1, $2, 'a', 50, 'manual', now()), ($1, $2, 'r', -9999, 'rust', now() + interval '1 minute')`,
+      [userId, skillId],
+    );
+    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    const after = await db.query(`select level, xp from public.skills where id = $1`, [skillId]);
+    expect(after.rows[0]).toEqual({ level: 1, xp: 0 });
   });
 
   it('keeps an earned floor even after the ledger is emptied', async () => {

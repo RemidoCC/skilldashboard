@@ -22,7 +22,9 @@ function palette(selector: string): Record<string, string> {
 }
 
 const day = palette(':root {');
-const night = palette(":root[data-theme='night']");
+/* The night block only overrides what changes, so the effective night palette
+   is day with those overrides applied — same as the cascade at runtime. */
+const night = { ...day, ...palette(":root[data-theme='night']") };
 
 describe.each([
   ['dag', day],
@@ -31,28 +33,47 @@ describe.each([
   it('defines every token the components reference', () => {
     for (const token of [
       'panel', 'recess', 'raised', 'screen', 'ink', 'muted',
-      'signal', 'signal-text', 'signal-fill', 'on-signal',
-      'edge', 'tick-off', 'screen-ink', 'screen-muted',
+      'signal', 'signal-text', 'signal-fill', 'on-signal', 'focus',
+      'edge', 'tick-off', 'screen-ink', 'screen-muted', 'ok',
     ]) {
       expect(p[token], `--${token} missing`).toMatch(/^#[0-9A-Fa-f]{3,6}$/);
     }
   });
 
+  /* Every foreground/background pair the app actually renders. Body copy,
+     labels, placeholders, error lines, button faces and the inverted chip —
+     all of it is normal text at 9-15px, so all of it needs 4.5:1. */
   it.each([
-    ['ink on panel', 'ink', 'panel'],
+    ['body ink on panel', 'ink', 'panel'],
     ['ink on recess', 'ink', 'recess'],
     ['ink on raised', 'ink', 'raised'],
-    ['muted on panel', 'muted', 'panel'],
-    ['muted on recess', 'muted', 'recess'],
-    ['muted on raised', 'muted', 'raised'],
-    ['signal-text on panel', 'signal-text', 'panel'],
-    ['signal-text on recess', 'signal-text', 'recess'],
-    ['signal-text on raised', 'signal-text', 'raised'],
-    ['on-signal on signal-fill', 'on-signal', 'signal-fill'],
+    ['label muted on panel', 'muted', 'panel'],
+    ['label muted on recess', 'muted', 'recess'],
+    ['label muted on raised', 'muted', 'raised'],
+    ['placeholder muted on raised', 'muted', 'raised'],
+    ['placeholder muted on recess', 'muted', 'recess'],
+    ['error signal-text on panel', 'signal-text', 'panel'],
+    ['error signal-text on recess', 'signal-text', 'recess'],
+    ['error signal-text on raised', 'signal-text', 'raised'],
+    ['button on-signal on signal-fill', 'on-signal', 'signal-fill'],
+    ['selected chip panel on ink', 'panel', 'ink'],
     ['screen-ink on screen', 'screen-ink', 'screen'],
     ['screen-muted on screen', 'screen-muted', 'screen'],
   ])('%s reaches AA for normal text', (_label, fg, bg) => {
     expect(contrast(p[fg], p[bg])).toBeGreaterThanOrEqual(AA_TEXT);
+  });
+
+  /* WCAG 2.4.11: a focus indicator needs 3:1 against the surface it sits on.
+     Every interactive element in the app lives on one of these three. */
+  it.each([['panel'], ['recess'], ['raised']])(
+    'the focus ring stands out on %s',
+    (surface) => {
+      expect(contrast(p.focus, p[surface])).toBeGreaterThanOrEqual(AA_LARGE);
+    },
+  );
+
+  it('the on-screen focus ring stands out on the display', () => {
+    expect(contrast(p.ok, p.screen)).toBeGreaterThanOrEqual(AA_LARGE);
   });
 
   it.each([

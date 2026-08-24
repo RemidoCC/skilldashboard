@@ -1,3 +1,4 @@
+import { applyXp, xpNeeded } from './curve';
 import { daysBetween } from './dates';
 import type { Capacity, Progress } from './types';
 
@@ -46,13 +47,31 @@ export function rustState(
 }
 
 /**
+ * The ledger amount that one level of decay is worth.
+ *
+ * Rust is written as a log entry like anything else, so it has to be expressed
+ * in XP: enough to give back the XP standing in the current level, plus the
+ * whole of the level below. Replaying that lands on exactly level - 1 with
+ * zero XP.
+ *
+ * Returns 0 when the skill is already sitting on an earned floor, or at level
+ * 1 — which is what keeps floors permanent. Because the guard lives here,
+ * no entry that would breach a floor is ever written, and the ledger stays
+ * safe to replay blindly.
+ */
+export function rustXpDelta(progress: Progress): number {
+  const lowest = Math.max(progress.floorLevel, 1);
+  if (progress.level <= lowest) return 0;
+  return -(progress.xp + xpNeeded(progress.level - 1));
+}
+
+/**
  * Applies one level of decay. Never drops below floor_level, and never below
  * level 1. XP within the level resets to 0 rather than going negative.
  */
 export function applyRust(progress: Progress): Progress {
-  const lowest = Math.max(progress.floorLevel, 1);
-  if (progress.level <= lowest) {
-    return { ...progress, level: lowest };
-  }
-  return { level: progress.level - 1, xp: 0, floorLevel: progress.floorLevel };
+  const delta = rustXpDelta(progress);
+  if (delta === 0) return { ...progress, level: Math.max(progress.floorLevel, 1, progress.level) };
+  const next = applyXp(progress, delta);
+  return { level: next.level, xp: next.xp, floorLevel: next.floorLevel };
 }

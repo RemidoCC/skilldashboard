@@ -10,7 +10,15 @@ export type SkillGlyph =
 
 export type TaskKind = 'check' | 'timer';
 
-export type LogSource = 'manual' | 'timer' | 'quick' | 'calendar' | 'mail' | 'quest';
+export type LogSource =
+  | 'manual'
+  | 'timer'
+  | 'quick'
+  | 'calendar'
+  | 'mail'
+  | 'quest'
+  /** Written by the decay job, always with a negative xp. */
+  | 'rust';
 
 export type Capacity = 'rustig' | 'normaal' | 'gek';
 

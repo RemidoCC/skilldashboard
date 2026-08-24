@@ -222,6 +222,24 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['mapping_rules']['Insert']>;
         Relationships: [];
       };
+      streak_freezes: {
+        Row: {
+          id: string;
+          user_id: string;
+          earned_week: string;
+          spent_on: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          earned_week: string;
+          spent_on?: string | null;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['streak_freezes']['Insert']>;
+        Relationships: [];
+      };
       integration_accounts: {
         Row: {
           user_id: string;

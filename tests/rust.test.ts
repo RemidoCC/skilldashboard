@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { applyRust, GRACE_DAYS, rustState } from '@/lib/domain/rust';
+import { applyRust, GRACE_DAYS, rustState, rustXpDelta } from '@/lib/domain/rust';
+import { applyXp, rebuild, xpNeeded } from '@/lib/domain/curve';
 
 describe('GRACE_DAYS', () => {
   it('follows the week capacity', () => {
@@ -68,5 +69,42 @@ describe('applyRust', () => {
   it('stops at the floor rather than stepping past it', () => {
     expect(applyRust({ level: 6, xp: 0, floorLevel: 5 }).level).toBe(5);
     expect(applyRust({ level: 5, xp: 0, floorLevel: 5 }).level).toBe(5);
+  });
+});
+
+describe('rustXpDelta', () => {
+  it('is the XP standing in the level plus the whole level below', () => {
+    // Level 8 with 120 XP: give back the 120, plus all of level 7 (2250).
+    expect(rustXpDelta({ level: 8, xp: 120, floorLevel: 5 })).toBe(-(120 + xpNeeded(7)));
+  });
+
+  it('is zero on an earned floor, so floors stay permanent', () => {
+    expect(rustXpDelta({ level: 5, xp: 40, floorLevel: 5 })).toBe(0);
+    expect(rustXpDelta({ level: 4, xp: 0, floorLevel: 5 })).toBe(0);
+  });
+
+  it('is zero at level one', () => {
+    expect(rustXpDelta({ level: 1, xp: 90, floorLevel: 0 })).toBe(0);
+  });
+
+  it('replays through the ledger to exactly one level down at zero XP', () => {
+    for (const state of [
+      { level: 3, xp: 0, floorLevel: 0 },
+      { level: 7, xp: 400, floorLevel: 5 },
+      { level: 12, xp: 5000, floorLevel: 10 },
+      { level: 2, xp: 1, floorLevel: 0 },
+    ]) {
+      const replayed = applyXp(state, rustXpDelta(state));
+      expect(replayed.level, `from level ${state.level}`).toBe(state.level - 1);
+      expect(replayed.xp).toBe(0);
+    }
+  });
+
+  it('a rusted skill rebuilt from its ledger lands on the same state', () => {
+    // Earn up to level 6, then rust once.
+    const gains = [100, 303, 580, 919, 1313, 1758];
+    const earned = rebuild(gains);
+    const decay = rustXpDelta(earned);
+    expect(rebuild([...gains, decay])).toEqual(applyRust(earned));
   });
 });

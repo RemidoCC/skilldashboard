@@ -28,8 +28,14 @@ export interface AppliedXp extends Progress {
 }
 
 /**
- * Adds XP to a skill. Leftover XP carries into the next level, and one
- * completion may cascade through several levels.
+ * Applies a gain to a skill. Leftover XP carries into the next level and one
+ * completion may cascade through several.
+ *
+ * A negative gain walks the other way, borrowing from the level below rather
+ * than being clamped at zero — that is what lets a rust entry live in the
+ * ledger and be replayed exactly. Level 1 is the bottom of the walk; the
+ * floor_level promise is enforced by rustXpDelta when the amount is computed,
+ * so no entry that breaches a floor is ever written.
  */
 export function applyXp(from: Progress, gain: number): AppliedXp {
   if (!Number.isInteger(gain)) {
@@ -37,7 +43,7 @@ export function applyXp(from: Progress, gain: number): AppliedXp {
   }
 
   let level = from.level;
-  let xp = Math.max(from.xp + gain, 0);
+  let xp = from.xp + gain;
   let floorLevel = from.floorLevel;
   const floorsClaimed: number[] = [];
 
@@ -50,6 +56,12 @@ export function applyXp(from: Progress, gain: number): AppliedXp {
       floorsClaimed.push(level);
     }
   }
+
+  while (xp < 0 && level > 1) {
+    level -= 1;
+    xp += xpNeeded(level);
+  }
+  if (xp < 0) xp = 0;
 
   return { level, xp, floorLevel, levelsGained: level - from.level, floorsClaimed };
 }

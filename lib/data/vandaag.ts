@@ -7,7 +7,7 @@ import { balanceSignal } from '@/lib/domain/balance';
 import { levelFraction } from '@/lib/domain/curve';
 import { rustState, type RustState } from '@/lib/domain/rust';
 import { statusLines } from '@/lib/domain/status';
-import { streakDays } from '@/lib/domain/streak';
+import { daysFromEntries, streakDays } from '@/lib/domain/streak';
 import { tierFor, totalLevel } from '@/lib/domain/tier';
 import type { Capacity, LogEntry, Skill, Task } from '@/lib/domain/types';
 
@@ -69,7 +69,10 @@ export async function loadVandaag(): Promise<VandaagData> {
 
   const activeSkills = skills.filter((s) => s.active);
   const todayEntries = entries.filter((e) => dayKey(e.createdAt) === today);
-  const xpToday = todayEntries.reduce((sum, e) => sum + e.xp, 0);
+  // Decay is not something you did today, so it stays out of the day's total.
+  const xpToday = todayEntries
+    .filter((e) => e.source !== 'rust')
+    .reduce((sum, e) => sum + e.xp, 0);
 
   const meters: MeterReading[] = activeSkills.map((skill) => ({
     skill,
@@ -92,7 +95,7 @@ export async function loadVandaag(): Promise<VandaagData> {
     tasks,
     meters,
     tier: tierFor(totalLevel(skills)),
-    streakDays: streakDays(entries.map((e) => dayKey(e.createdAt)), today),
+    streakDays: streakDays(daysFromEntries(entries), today),
     xpToday,
     todayEntries,
     seasonLabel: seasonRes.data

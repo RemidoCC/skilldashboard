@@ -19,6 +19,7 @@
   --signal-text: #A32E00;  /* the same signal where it has to carry words */
   --signal-fill: #A32E00;  /* primary button fill */
   --on-signal:   #FFFFFF;  /* what sits on that fill */
+  --focus:       #A32E00;  /* focus ring; needs 3:1 on every surface */
   --ok:     #B8E986;  /* on-screen only */
   --edge:   #C4C3BD;  /* the hard shadow under raised elements */
 
@@ -59,6 +60,7 @@
   --signal-text: #F26A32;
   --signal-fill: #F26A32;
   --on-signal:   #16170F;
+  --focus:       #F26A32;
   --edge:   #0C0D0B;
   --tick-off: #3A3B36;
 
@@ -76,6 +78,7 @@
   --color-signal: var(--signal);
   --color-signal-text: var(--signal-text);
   --color-signal-fill: var(--signal-fill);
+  --color-focus: var(--focus);
   --color-ok:     var(--ok);
   --color-edge:   var(--edge);
   --color-screen-ink:   var(--screen-ink);
@@ -146,11 +149,18 @@ i, em, cite, address, dfn, var { font-style: normal; }
 /* Values are printed in 700. */
 .value { font-weight: 700; }
 
+/* Placeholder text is still text, so it meets the same bar as a label
+   rather than whatever grey the browser picks. */
+::placeholder {
+  color: var(--muted);
+  opacity: 1; /* Firefox dims placeholders by default, which undoes the above. */
+}
+
 /* ------------------------------------------------------------------ focus */
 
 /* Every interactive element shows where the keyboard is. */
 :where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--signal);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 .screen :where(a, button, input, [tabindex]):focus-visible {

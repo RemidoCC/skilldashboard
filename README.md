@@ -62,6 +62,20 @@ level-up and a single completion can cascade several levels.
 **Floors.** `floor_level` is claimed each time a skill crosses a multiple of 5,
 and floors are permanent. Rust can never take a skill below one.
 
+**Rust lives in the ledger.** Decay is written as a `log_entries` row with
+`source = 'rust'` and a negative amount — exactly the XP standing in the
+current level plus the whole of the level below, so replaying it lands on one
+level down at zero XP. The replay walks levels downward as well as upward,
+which is what makes `log_entries` the complete source of truth rather than a
+partial one. The floor guard sits in `rustXpDelta`, so no entry that would
+breach a floor is ever written and the ledger is safe to replay blindly.
+
+**Freezes are events, not recomputations.** One row per earned freeze, carrying
+the week that earned it and the day it covered. `resolveStreak` honours only
+freezes already recorded; `freezeToSpend` decides once a day whether one is
+due. Doing it the other way round — walking back and burning held freezes on
+any gap found — would manufacture a streak that was never earned.
+
 **Two implementations, one answer.** The curve exists in TypeScript
 (`lib/domain/curve.ts`) and in SQL (`public.xp_needed`,
 `public.recalculate_levels`). Both round half away from zero, and
@@ -88,17 +102,28 @@ the signal colour.
 
 Screenshots of both palettes are in `docs/screenshots/`.
 
-### One deliberate deviation
+### Contrast
 
 The brief specifies `--muted: #7A7973` and `--screen-muted: #6E7178`, and
 separately requires WCAG AA in both palettes. Those cannot both hold: labels run
 at 9–10px, so they are normal text needing 4.5:1, and the given values reach
 only 3.40:1 on `--panel` and 2.94:1 on `--recess`. The muted tones here are the
-nearest values that pass on every surface they are used on, and `--signal-text`
-/ `--signal-fill` exist because `--signal` at 2.62:1 cannot carry a warning
-sentence or a button label. `--signal` itself is unchanged and still does all
-the non-text work. `tests/contrast.test.ts` reads the real tokens out of the
-stylesheet and enforces this, so it cannot drift.
+nearest values that pass on every surface they are used on. `--signal` itself
+is unchanged and still does all the non-text work — the dot matrix, the tier
+bar, lit ticks — while three derived tokens carry the cases it cannot:
+
+| Token | Why it exists |
+| --- | --- |
+| `--signal-text` | `--signal` reaches 2.62:1 on `--panel`; a warning sentence needs 4.5:1 |
+| `--signal-fill` / `--on-signal` | a button face and its label, passing in both palettes |
+| `--focus` | WCAG 2.4.11 wants 3:1 for a focus ring against every surface it lands on |
+
+Every text pair the app renders clears AA with headroom — the tightest is
+4.61:1 — and several reach AAA. Placeholders are given an explicit colour
+rather than the browser's default grey, which lands around 2.5:1.
+`tests/contrast.test.ts` reads the real tokens out of the stylesheet, models
+the day-to-night cascade the way the browser does, and checks every pair, so
+none of this can drift.
 
 ## Status
 
@@ -109,12 +134,7 @@ stylesheet and enforces this, so it cannot drift.
 - [ ] Phase 4 — Quests, capacity, rust, freezes, Sunday report, seasons
 - [ ] Phase 5 — Google Calendar and Gmail
 
-### Open questions for phase 4
-
-- **Where rust is recorded.** `log_entries.source` is constrained to
-  `manual | timer | quick | calendar | mail | quest`, so a decay event has
-  nowhere to live in the ledger. `recalculate_levels` therefore rebuilds the
-  *earned* progression. Before rust ships, decay needs either a `rust` source, a
-  column on `skills`, or its own table.
-- **Where streak freezes are stored.** The schema has no home for the freeze
-  count, and the streak is currently derived from `log_entries` alone.
+Rust and freeze storage were open after phase 1 and are now settled — see
+[The rules](#the-rules). The mechanics themselves (the decay job, the weekly
+grant, the Sunday report) land in phase 4; the schema, the domain functions and
+their tests are already in place so that phase is not blocked.

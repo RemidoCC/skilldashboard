@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { addDays, dayKey } from '@/lib/domain/dates';
 import { earnedXp, withStreakBonus } from '@/lib/domain/xp';
-import { streakDays } from '@/lib/domain/streak';
+import { daysFromEntries, streakDays } from '@/lib/domain/streak';
 import { toKind } from '@/lib/data/map';
 
 export interface LogResult {
@@ -27,12 +27,13 @@ async function currentStreak(
 ): Promise<number> {
   const { data, error } = await supabase
     .from('log_entries')
-    .select('created_at')
+    .select('created_at, source')
     .gte('created_at', `${addDays(today, -60)}T00:00:00Z`);
 
   if (error || !data) return 0;
+  // Rows arrive in snake_case; daysFromEntries works on the domain shape.
   return streakDays(
-    data.map((row) => dayKey(row.created_at)),
+    daysFromEntries(data.map((row) => ({ createdAt: row.created_at, source: row.source }))),
     today,
   );
 }

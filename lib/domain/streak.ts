@@ -22,7 +22,16 @@ export function streakDays(entryDays: Iterable<string>, today: string): number {
   return count;
 }
 
-/** Convenience: day keys for a set of log entry timestamps. */
-export function daysFromEntries(entries: readonly { createdAt: string }[]): Set<string> {
-  return new Set(entries.map((e) => dayKey(e.createdAt)));
+/**
+ * Day keys for a set of log entries.
+ *
+ * Rust entries are excluded: decay is the system acting on a skill, not the
+ * user showing up, so it can neither extend a streak nor stand in for a day.
+ */
+export function daysFromEntries(
+  entries: readonly { createdAt: string; source?: string }[],
+): Set<string> {
+  return new Set(
+    entries.filter((e) => e.source !== 'rust').map((e) => dayKey(e.createdAt)),
+  );
 }

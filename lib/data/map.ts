@@ -20,7 +20,9 @@ export function toKind(value: string): TaskKind {
 }
 
 export function toSource(value: string): LogSource {
-  const known: readonly string[] = ['manual', 'timer', 'quick', 'calendar', 'mail', 'quest'];
+  const known: readonly string[] = [
+    'manual', 'timer', 'quick', 'calendar', 'mail', 'quest', 'rust',
+  ];
   return known.includes(value) ? (value as LogSource) : 'manual';
 }
 
