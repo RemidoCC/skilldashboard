@@ -21,12 +21,6 @@ const PATHS: Record<GlyphName, React.ReactNode> = {
   ),
 };
 
-export const GLYPH_NAMES = Object.keys(PATHS) as GlyphName[];
-
-export function isGlyphName(value: string): value is GlyphName {
-  return value in PATHS;
-}
-
 interface Props {
   name: GlyphName;
   size?: number;

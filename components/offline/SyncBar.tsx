@@ -7,13 +7,14 @@ import { useOffline } from './OfflineProvider';
  * say. A quiet, fully synced app shows nothing at all.
  */
 export function SyncBar() {
-  const { pending, online, syncing, failures, dismissFailure } = useOffline();
+  const { pending, mutations, online, syncing, failures, dismissFailure } = useOffline();
+  const queued = pending.length + mutations.length;
 
-  if (failures.length === 0 && pending.length === 0 && online) return null;
+  if (failures.length === 0 && queued === 0 && online) return null;
 
   return (
     <div className="mt-3 space-y-2">
-      {pending.length > 0 || !online ? (
+      {queued > 0 || !online ? (
         <div className="recess flex items-center justify-between gap-3 px-3 py-2">
           <span className="label">
             {online
@@ -23,11 +24,11 @@ export function SyncBar() {
               : 'Geen verbinding'}
           </span>
           <span className="value text-[13px]">
-            {pending.length === 0
+            {queued === 0
               ? 'alles verstuurd'
-              : pending.length === 1
+              : queued === 1
                 ? '1 in de wachtrij'
-                : `${pending.length} in de wachtrij`}
+                : `${queued} in de wachtrij`}
           </span>
         </div>
       ) : null}

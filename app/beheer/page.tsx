@@ -1,15 +1,36 @@
-import { BottomNav } from '@/components/shell/BottomNav';
+import { redirect } from 'next/navigation';
+import { currentUser } from '@/lib/supabase/server';
+import { loadBeheer } from '@/lib/data/beheer';
 import { Header } from '@/components/shell/Header';
+import { BottomNav } from '@/components/shell/BottomNav';
+import { SyncBar } from '@/components/offline/SyncBar';
+import { BeheerBoard } from '@/components/beheer/BeheerBoard';
 
-export default function BeheerPage() {
+export const dynamic = 'force-dynamic';
+
+export default async function BeheerPage() {
+  const user = await currentUser();
+  if (!user) redirect('/login');
+
+  const data = await loadBeheer();
+
   return (
     <>
       <main className="mx-auto max-w-md px-4 pb-24">
         <Header seasonLabel={null} />
-        <h2 className="label mt-6">Beheer</h2>
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-          Taken, vaardigheden, doelen en instellingen komen hier in fase 3.
-        </p>
+        <SyncBar />
+
+        <div className="mt-5">
+          <BeheerBoard
+            server={{
+              skills: data.skills,
+              tasks: data.tasks,
+              goals: data.goals,
+              capacity: data.capacity,
+            }}
+            weekStart={data.weekStart}
+          />
+        </div>
       </main>
       <BottomNav />
     </>

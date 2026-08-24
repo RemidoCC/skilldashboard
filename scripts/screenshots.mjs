@@ -13,6 +13,8 @@ const HIDE_NAV = 'nav[aria-label="Hoofdnavigatie"] { display: none !important; }
    redirect, so there is nothing to capture there yet. */
 const pages = [
   { slug: 'vandaag', path: '/dev/vandaag' },
+  { slug: 'beheer', path: '/dev/beheer' },
+  { slug: 'historie', path: '/dev/historie' },
   { slug: 'login', path: '/login' },
 ];
 const themes = ['day', 'night'];

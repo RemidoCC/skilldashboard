@@ -5,12 +5,14 @@ import {
   DB_NAME,
   DB_VERSION,
   FAILURE_STORE,
+  MUTATION_STORE,
   QUEUE_STORE,
   SYNC_TAG,
   toRequestBody,
   type FailedCompletion,
   type PendingCompletion,
 } from './types';
+import type { Mutation, PendingMutation } from './mutations';
 
 /**
  * The offline write queue.
@@ -32,6 +34,10 @@ function db(): Promise<IDBPDatabase> {
       }
       if (!database.objectStoreNames.contains(FAILURE_STORE)) {
         database.createObjectStore(FAILURE_STORE, { keyPath: 'id' });
+      }
+      if (!database.objectStoreNames.contains(MUTATION_STORE)) {
+        // queueId sorts by time, so getAll replays in the order they were made.
+        database.createObjectStore(MUTATION_STORE, { keyPath: 'queueId' });
       }
     },
   });
@@ -61,6 +67,111 @@ async function bumpAttempts(item: PendingCompletion): Promise<void> {
   const database = await db();
   await database.put(QUEUE_STORE, { ...item, attempts: item.attempts + 1 });
 }
+
+/* ------------------------------------------------------------- mutations -- */
+
+export async function enqueueMutation(mutation: Mutation): Promise<PendingMutation> {
+  const now = new Date();
+  const item: PendingMutation = {
+    // Time-ordered so the store replays in the order the edits were made, with
+    // a random tail so two edits in the same millisecond cannot collide.
+    queueId: `${now.toISOString()}-${crypto.randomUUID().slice(0, 8)}`,
+    mutation,
+    createdAt: now.toISOString(),
+    attempts: 0,
+  };
+  const database = await db();
+  await database.put(MUTATION_STORE, item);
+  return item;
+}
+
+export async function pendingMutations(): Promise<PendingMutation[]> {
+  const database = await db();
+  const all = (await database.getAll(MUTATION_STORE)) as PendingMutation[];
+  return all.sort((a, b) => (a.queueId < b.queueId ? -1 : a.queueId > b.queueId ? 1 : 0));
+}
+
+async function forgetMutation(queueId: string): Promise<void> {
+  const database = await db();
+  await database.delete(MUTATION_STORE, queueId);
+}
+
+/**
+ * Sends queued edits, oldest first, and stops at the first one that cannot go
+ * through. Edits are order-dependent — renaming a skill then switching it off
+ * must not arrive the other way round — so a blocked queue waits rather than
+ * skipping ahead.
+ */
+export async function flushMutations(): Promise<{ sent: number; remaining: number }> {
+  let sent = 0;
+  for (const item of await pendingMutations()) {
+    let response: Response;
+    try {
+      response = await fetch('/api/mutations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(item.mutation),
+      });
+    } catch {
+      break; // Offline. Everything behind it waits too.
+    }
+
+    if (response.ok) {
+      await forgetMutation(item.queueId);
+      sent += 1;
+      continue;
+    }
+
+    if (response.status >= 400 && response.status < 500) {
+      let message = 'Deze wijziging kon niet worden opgeslagen.';
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === 'object' && 'error' in body) {
+          message = String((body as { error: unknown }).error);
+        }
+      } catch {
+        // Keep the default.
+      }
+      const database = await db();
+      await database.put(FAILURE_STORE, {
+        id: item.queueId,
+        title: describeMutation(item.mutation),
+        message,
+        occurredAt: item.createdAt,
+      } satisfies FailedCompletion);
+      await forgetMutation(item.queueId);
+      continue;
+    }
+
+    break; // Server trouble: keep it and stop, so order holds.
+  }
+
+  return { sent, remaining: (await pendingMutations()).length };
+}
+
+/** A short human name for a mutation, used when one has to be reported. */
+export function describeMutation(mutation: Mutation): string {
+  switch (mutation.kind) {
+    case 'task.create':
+      return `Nieuwe taak "${mutation.task.title}"`;
+    case 'task.update':
+      return 'Wijziging aan een taak';
+    case 'skill.create':
+      return `Nieuwe vaardigheid "${mutation.skill.name}"`;
+    case 'skill.update':
+      return 'Wijziging aan een vaardigheid';
+    case 'goal.create':
+      return `Nieuw doel "${mutation.goal.title}"`;
+    case 'goal.update':
+      return 'Wijziging aan een doel';
+    case 'goal.delete':
+      return 'Verwijderd doel';
+    case 'week.capacity':
+      return 'Weekinstelling';
+  }
+}
+
+/* ----------------------------------------------------------- completions -- */
 
 export interface FlushReport {
   sent: number;

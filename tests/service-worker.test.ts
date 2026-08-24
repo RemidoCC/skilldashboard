@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { describeMutation } from '@/lib/offline/queue';
+import type { Mutation } from '@/lib/offline/mutations';
 import {
   DB_NAME,
   DB_VERSION,
   FAILURE_STORE,
+  MUTATION_STORE,
   QUEUE_STORE,
   SYNC_CHANNEL,
   SYNC_TAG,
@@ -33,6 +36,7 @@ describe('service worker constants', () => {
     ['DB_NAME', DB_NAME],
     ['QUEUE_STORE', QUEUE_STORE],
     ['FAILURE_STORE', FAILURE_STORE],
+    ['MUTATION_STORE', MUTATION_STORE],
     ['SYNC_TAG', SYNC_TAG],
     ['SYNC_CHANNEL', SYNC_CHANNEL],
   ])('%s matches the shared definition', (name, expected) => {
@@ -43,8 +47,24 @@ describe('service worker constants', () => {
     expect(Number(constantOf('DB_VERSION'))).toBe(DB_VERSION);
   });
 
-  it('posts to the endpoint the queue posts to', () => {
+  it('posts to the endpoints the queue posts to', () => {
     expect(source).toContain("'/api/completions'");
+    expect(source).toContain("'/api/mutations'");
+  });
+
+  it('sends edits before completions', () => {
+    // A completion can name a task that so far only exists in the edit queue.
+    // If it overtook, the write would fail on a missing row.
+    const edits = source.indexOf('const edits = await drainMutations(database)');
+    const items = source.indexOf('const items = await readAll(database)');
+    expect(edits).toBeGreaterThan(-1);
+    expect(edits).toBeLessThan(items);
+  });
+
+  it('stops the edit run at the first one it cannot send', () => {
+    // Edits are order-dependent, so a blocked one must not be skipped past.
+    const drain = source.slice(source.indexOf('async function drainMutations'));
+    expect(drain.slice(0, drain.indexOf('return { sent, parked }'))).toContain('break;');
   });
 
   it('sends cookies, or the write would arrive unauthenticated', () => {
@@ -101,6 +121,44 @@ function pending(overrides: Partial<PendingCompletion> = {}): PendingCompletion 
     ...overrides,
   };
 }
+
+/** Pulls the worker's own describeMutation out of the file and runs it. */
+function workerDescribe(mutation: Mutation): string {
+  const start = source.indexOf('function describeMutation(mutation)');
+  expect(start, 'describeMutation not found in sw.js').toBeGreaterThan(-1);
+  const end = source.indexOf('\n}', start);
+  const body = source.slice(start, end + 2);
+  const factory = new Function(`${body}; return describeMutation;`) as () => (
+    m: Mutation,
+  ) => string;
+  return factory()(mutation);
+}
+
+describe('service worker mutation labels', () => {
+  const cases: [string, Mutation][] = [
+    ['task.create', { kind: 'task.create', id: 'x', task: { skillId: 's', title: 'Offerte', taskKind: 'check', value: 20, onToday: false } }],
+    ['task.update', { kind: 'task.update', id: 'x', patch: { value: 30 } }],
+    ['skill.create', { kind: 'skill.create', id: 'x', skill: { name: 'Tuin', subtitle: null, color: '#6E8C5A', glyph: 'ring', sortOrder: 9 } }],
+    ['skill.update', { kind: 'skill.update', id: 'x', patch: { active: false } }],
+    ['goal.create', { kind: 'goal.create', id: 'x', goal: { skillId: 's', title: 'Certificaat', targetDate: null } }],
+    ['goal.update', { kind: 'goal.update', id: 'x', patch: { progress: 50 } }],
+    ['goal.delete', { kind: 'goal.delete', id: 'x' }],
+    ['week.capacity', { kind: 'week.capacity', weekStart: '2026-08-24', capacity: 'gek' }],
+  ];
+
+  it.each(cases)('names %s the same as the page does', (_label, mutation) => {
+    expect(workerDescribe(mutation)).toBe(describeMutation(mutation));
+  });
+
+  it('covers every mutation kind the app can queue', () => {
+    // If a kind is added without a label, a failed edit is reported as
+    // "Wijziging" and the user cannot tell which one was lost.
+    expect(cases).toHaveLength(8);
+    for (const [, mutation] of cases) {
+      expect(workerDescribe(mutation)).not.toBe('Wijziging');
+    }
+  });
+});
 
 describe('service worker request body', () => {
   it.each([

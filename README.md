@@ -29,7 +29,8 @@ npm run dev
 | `npm run db:setup` | Provisions a local Postgres, applies the migrations, prints the URL |
 | `npm run db:types` | Regenerates `lib/db/database.types.ts` |
 | `npm run build:verify` / `start:verify` | Production build on port 3100, in its own `.next-prod` so it does not tread on a running dev server |
-| `npm run verify:offline` | Drives the app in a browser with the network cut |
+| `npm run verify:offline` | Drives Vandaag in a browser with the network cut |
+| `npm run verify:beheer` | Same, for the edits made in Beheer |
 | `npm run verify:pwa` | Checks the installability criteria one by one |
 | `npm run screenshots` / `icons` | Regenerates `docs/screenshots/` and the app icons |
 
@@ -44,10 +45,14 @@ npm test
 
 ```
 app/                    routes; /vandaag is the home screen
-  api/completions/      the single write endpoint
+  api/completions/      completions in
+  api/mutations/        edits from Beheer
+  api/export/           the whole account as JSON
   dev/                  visual preview against fixtures, 404s in production
 components/instrument/  the dot matrix, the meters, the display, the self-test
 components/vandaag/     task rows, timer, quick log
+components/beheer/      tasks, skills, goals, settings
+components/historie/    small multiples and the day log
 components/offline/     the queue provider, sync bar, install prompt
 lib/domain/             the rules — pure, dependency-free, fully tested
 lib/offline/            the IndexedDB queue and the optimistic fold
@@ -96,6 +101,26 @@ entry and advances the skill in one call. The client supplies the entry id, so
 a mutation replayed after a reconnect lands exactly once — which is what the
 offline queue in phase 2 will depend on.
 
+## Beheer and Historie
+
+**Beheer** covers tasks (create, edit, put on today, archive and restore),
+skills (switch on and off, edit, add custom ones from the fixed glyph set),
+goals, and settings — sound, haptics, night panel, week capacity and the JSON
+export. Two warnings are the point of the screen rather than decoration: more
+than three tasks on today, and more than six skills active, both stated plainly
+with what to do about it.
+
+**Historie** shows a level trajectory per skill as small multiples — step
+lines, not curves, because a level is a whole number that changes on a day and
+smoothing would imply a continuity that is not there. Each chart is scaled to
+its own skill with the range printed beside it; a shared axis would flatten a
+young skill into a flat line. A skill that climbed and then rusted back reports
+its peak, so the window does not read as though nothing happened. Below that,
+the ledger by day with its notes, and the season badges earned.
+
+The trajectory replays the **whole** ledger, not just the window: a level on
+day one of the window depends on everything before it.
+
 ## Offline
 
 Completing a task never waits on the network. Every write goes into an
@@ -123,9 +148,16 @@ Three details that took a second pass:
   back through history spending held freezes on any gap it met, which turned
   three freezes and one logged day into a four-day streak.
 
-`npm run verify:offline` drives all of it in a real browser: cut the network,
-complete a task, reload, reconnect, and check that a permanently failed write
-is reported rather than lost.
+Beheer runs through the same outbox, in a second store. Completions are
+additive and idempotent by entry id; edits overwrite, so they replay **in
+order** and a blocked one stops the run rather than letting later edits jump
+it — renaming a skill and then switching it off must not arrive the other way
+round. Edits are also sent before completions, because a completion can name a
+task that so far exists only in the edit queue.
+
+`npm run verify:offline` and `npm run verify:beheer` drive all of it in a real
+browser: cut the network, make the change, reload, reconnect, and check that
+anything that can never succeed is named rather than lost.
 
 ## Design
 
@@ -170,7 +202,9 @@ none of this can drift.
       check-off, timers, quick log, the dot matrix and the meters.
 - [x] **Phase 2 — PWA and offline.** Manifest, icons, service worker, offline
       shell, IndexedDB write queue with background replay, install prompt.
-- [ ] Phase 3 — Beheer and Historie
+- [x] **Phase 3 — Beheer and Historie.** Tasks, skills, goals and settings with
+      full CRUD; level trajectories, the day log and season badges. Every edit
+      queues offline like a completion.
 - [ ] Phase 4 — Quests, capacity, rust, freezes, Sunday report, seasons
 - [ ] Phase 5 — Google Calendar and Gmail
 

@@ -6,8 +6,14 @@
  * IndexedDB, which cannot bundle a helper library).
  */
 export const DB_NAME = 'skillunit';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const QUEUE_STORE = 'pending-completions';
+/**
+ * Edits made in Beheer. Kept apart from completions because the two replay
+ * differently: a completion is additive and idempotent by entry id, an edit
+ * overwrites and the last one simply wins.
+ */
+export const MUTATION_STORE = 'pending-mutations';
 /**
  * Writes that can never succeed — a deleted task, a dead session. They are
  * parked here rather than reported over a channel, because the worker often

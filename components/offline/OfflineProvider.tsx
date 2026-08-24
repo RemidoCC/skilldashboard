@@ -11,12 +11,16 @@ import {
 import { useRouter } from 'next/navigation';
 import {
   enqueue,
+  enqueueMutation,
   flush,
+  flushMutations,
   pending as readPending,
+  pendingMutations as readPendingMutations,
   readFailures,
   requestBackgroundSync,
   dismissFailure as forgetFailure,
 } from '@/lib/offline/queue';
+import type { Mutation, PendingMutation } from '@/lib/offline/mutations';
 import { SYNC_CHANNEL, type FailedCompletion, type PendingCompletion } from '@/lib/offline/types';
 
 /** Everything a caller supplies; the queue adds the retry count. */
@@ -24,11 +28,15 @@ export type RecordInput = Omit<PendingCompletion, 'attempts'>;
 
 interface OfflineState {
   pending: PendingCompletion[];
+  /** Queued edits from Beheer, in the order they were made. */
+  mutations: PendingMutation[];
   online: boolean;
   syncing: boolean;
   /** Writes that can never succeed, surfaced once so they are not lost silently. */
   failures: FailedCompletion[];
   record: (input: RecordInput) => Promise<void>;
+  /** Queues an edit and shows it immediately. */
+  mutate: (mutation: Mutation) => Promise<void>;
   dismissFailure: (id: string) => void;
 }
 
@@ -43,6 +51,7 @@ export function useOffline(): OfflineState {
 export function OfflineProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [pending, setPending] = useState<PendingCompletion[]>([]);
+  const [mutations, setMutations] = useState<PendingMutation[]>([]);
   // Assume online for the first paint so the server and client markup agree;
   // the effect corrects it immediately.
   const [online, setOnline] = useState(true);
@@ -51,6 +60,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   const refreshPending = useCallback(async () => {
     setPending(await readPending());
+    setMutations(await readPendingMutations());
   }, []);
 
   /* Failures are parked in IndexedDB rather than passed around, because the
@@ -64,11 +74,14 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   const drain = useCallback(async () => {
     setSyncing(true);
     try {
+      // Edits first: a completion may refer to a task that only exists in the
+      // mutation queue, and sending it after would fail on a missing row.
+      const edits = await flushMutations();
       const report = await flush();
       await collectFailures();
       await refreshPending();
-      // Anything that landed changes levels and XP, so pull fresh server state.
-      if (report.sent > 0) router.refresh();
+      // Anything that landed changes what the server would render.
+      if (report.sent > 0 || edits.sent > 0) router.refresh();
     } finally {
       setSyncing(false);
     }
@@ -132,6 +145,17 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     [drain],
   );
 
+  const mutate = useCallback(
+    async (mutation: Mutation) => {
+      const item = await enqueueMutation(mutation);
+      // Show it first. Beheer must never wait on the network either.
+      setMutations((current) => [...current, item]);
+      void requestBackgroundSync();
+      if (navigator.onLine) await drain();
+    },
+    [drain],
+  );
+
   const dismissFailure = useCallback((id: string) => {
     setFailures((current) => current.filter((failure) => failure.id !== id));
     void forgetFailure(id);
@@ -139,7 +163,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
   return (
     <OfflineContext.Provider
-      value={{ pending, online, syncing, failures, record, dismissFailure }}
+      value={{ pending, mutations, online, syncing, failures, record, mutate, dismissFailure }}
     >
       {children}
     </OfflineContext.Provider>

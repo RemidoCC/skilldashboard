@@ -1,0 +1,118 @@
+import { applyXp, START } from './curve';
+import { addDays, dayKey, daysBetween } from './dates';
+import type { LogEntry, Progress, Skill } from './types';
+
+/** How far back Historie looks. Long enough to show a season, short enough to stay quick. */
+export const WINDOW_DAYS = 90;
+
+export interface TrajectoryPoint {
+  day: string;
+  level: number;
+  /** Cumulative XP at the end of that day, for the shape of the line. */
+  xpInLevel: number;
+}
+
+export interface SkillTrajectory {
+  skillId: string;
+  name: string;
+  color: string;
+  points: TrajectoryPoint[];
+  /** Level at the start and the end of the window. */
+  from: number;
+  to: number;
+  /** Highest level reached inside the window. */
+  peak: number;
+}
+
+/**
+ * Level per skill over a window of days, rebuilt from the ledger.
+ *
+ * The whole ledger is replayed, not just the window: a skill's level on day
+ * one of the window depends on everything before it. Entries before the window
+ * set the starting point; only the window is returned.
+ *
+ * One point per day, so every skill's series lines up and the small multiples
+ * can share an axis.
+ */
+export function levelTrajectory(
+  skills: readonly Skill[],
+  entries: readonly LogEntry[],
+  from: string,
+  to: string,
+): SkillTrajectory[] {
+  const span = daysBetween(from, to);
+  if (span < 0) return [];
+
+  const days: string[] = [];
+  for (let i = 0; i <= span; i += 1) days.push(addDays(from, i));
+
+  const bySkill = new Map<string, LogEntry[]>();
+  for (const entry of entries) {
+    const list = bySkill.get(entry.skillId);
+    if (list) list.push(entry);
+    else bySkill.set(entry.skillId, [entry]);
+  }
+
+  return skills.map((skill) => {
+    const own = (bySkill.get(skill.id) ?? [])
+      .slice()
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+    let state: Progress = START;
+    let index = 0;
+
+    // Everything before the window decides where the line starts.
+    while (index < own.length && dayKey(own[index].createdAt) < from) {
+      const next = applyXp(state, own[index].xp);
+      state = { level: next.level, xp: next.xp, floorLevel: next.floorLevel };
+      index += 1;
+    }
+
+    const startLevel = state.level;
+    const points: TrajectoryPoint[] = [];
+
+    for (const day of days) {
+      while (index < own.length && dayKey(own[index].createdAt) <= day) {
+        const next = applyXp(state, own[index].xp);
+        state = { level: next.level, xp: next.xp, floorLevel: next.floorLevel };
+        index += 1;
+      }
+      points.push({ day, level: state.level, xpInLevel: state.xp });
+    }
+
+    return {
+      skillId: skill.id,
+      name: skill.name,
+      color: skill.color,
+      points,
+      from: startLevel,
+      to: state.level,
+      peak: points.reduce((high, p) => Math.max(high, p.level), startLevel),
+    };
+  });
+}
+
+export interface LogDay {
+  day: string;
+  entries: LogEntry[];
+  xp: number;
+}
+
+/** Log entries grouped by day, newest day first. */
+export function groupByDay(entries: readonly LogEntry[]): LogDay[] {
+  const days = new Map<string, LogEntry[]>();
+  for (const entry of entries) {
+    const key = dayKey(entry.createdAt);
+    const list = days.get(key);
+    if (list) list.push(entry);
+    else days.set(key, [entry]);
+  }
+
+  return [...days.entries()]
+    .map(([day, list]) => ({
+      day,
+      entries: list.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      xp: list.reduce((sum, e) => sum + e.xp, 0),
+    }))
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+}

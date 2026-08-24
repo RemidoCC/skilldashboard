@@ -7,7 +7,7 @@
  *
  * Bump VERSION to retire every old cache at once.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = `skillunit-shell-${VERSION}`;
 const PAGE_CACHE = `skillunit-pages-${VERSION}`;
 const ASSET_CACHE = `skillunit-assets-${VERSION}`;
@@ -18,8 +18,9 @@ const SHELL = [OFFLINE_URL, '/manifest.webmanifest', '/icons/icon-192.png', '/ic
 /* The queue, shared with the page. Kept in raw IndexedDB because a worker
  * cannot pull in a helper library. Must stay in step with lib/offline/types.ts. */
 const DB_NAME = 'skillunit';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const QUEUE_STORE = 'pending-completions';
+const MUTATION_STORE = 'pending-mutations';
 const FAILURE_STORE = 'failed-completions';
 const SYNC_TAG = 'skillunit-completions';
 const SYNC_CHANNEL = 'skillunit-sync';
@@ -119,6 +120,9 @@ function openQueue() {
       if (!database.objectStoreNames.contains(FAILURE_STORE)) {
         database.createObjectStore(FAILURE_STORE, { keyPath: 'id' });
       }
+      if (!database.objectStoreNames.contains(MUTATION_STORE)) {
+        database.createObjectStore(MUTATION_STORE, { keyPath: 'queueId' });
+      }
     };
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
@@ -130,6 +134,21 @@ function readAll(database) {
     const tx = database.transaction(QUEUE_STORE, 'readonly');
     const request = tx.objectStore(QUEUE_STORE).index('occurredAt').getAll();
     request.onsuccess = () => resolve(request.result || []);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/* queueId is time-ordered, so getAll comes back in the order the edits
+ * were made. Order matters here in a way it does not for completions. */
+function readMutations(database) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(MUTATION_STORE, 'readonly');
+    const request = tx.objectStore(MUTATION_STORE).getAll();
+    request.onsuccess = () => {
+      const all = request.result || [];
+      all.sort((a, b) => (a.queueId < b.queueId ? -1 : a.queueId > b.queueId ? 1 : 0));
+      resolve(all);
+    };
     request.onerror = () => reject(request.error);
   });
 }
@@ -170,6 +189,82 @@ function remove(database, id) {
   });
 }
 
+function removeMutation(database, queueId) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(MUTATION_STORE, 'readwrite');
+    tx.objectStore(MUTATION_STORE).delete(queueId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* Must match describeMutation in lib/offline/queue.ts. */
+function describeMutation(mutation) {
+  switch (mutation.kind) {
+    case 'task.create':
+      return `Nieuwe taak "${mutation.task.title}"`;
+    case 'task.update':
+      return 'Wijziging aan een taak';
+    case 'skill.create':
+      return `Nieuwe vaardigheid "${mutation.skill.name}"`;
+    case 'skill.update':
+      return 'Wijziging aan een vaardigheid';
+    case 'goal.create':
+      return `Nieuw doel "${mutation.goal.title}"`;
+    case 'goal.update':
+      return 'Wijziging aan een doel';
+    case 'goal.delete':
+      return 'Verwijderd doel';
+    case 'week.capacity':
+      return 'Weekinstelling';
+    default:
+      return 'Wijziging';
+  }
+}
+
+/* Edits go first and in order: a completion can refer to a task that so far
+ * only exists in this queue, and would fail on a missing row if it overtook.
+ * A blocked edit stops the run rather than letting later ones jump it. */
+async function drainMutations(database) {
+  let sent = 0;
+  let parked = 0;
+
+  for (const item of await readMutations(database)) {
+    let response;
+    try {
+      response = await fetch('/api/mutations', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(item.mutation),
+        credentials: 'same-origin',
+      });
+    } catch {
+      throw new Error('offline');
+    }
+
+    if (response.ok) {
+      await removeMutation(database, item.queueId);
+      sent += 1;
+      continue;
+    }
+
+    if (response.status >= 400 && response.status < 500) {
+      await park(database, {
+        id: item.queueId,
+        title: describeMutation(item.mutation),
+        occurredAt: item.createdAt,
+      }, await messageFrom(response));
+      await removeMutation(database, item.queueId);
+      parked += 1;
+      continue;
+    }
+
+    break; // Server trouble. Stop so the order holds.
+  }
+
+  return { sent, parked };
+}
+
 /* Must produce the same body as lib/offline/types.ts toRequestBody. */
 function toBody(item) {
   return item.kind === 'task'
@@ -194,9 +289,10 @@ function toBody(item) {
 
 async function drainQueue() {
   const database = await openQueue();
+  const edits = await drainMutations(database);
   const items = await readAll(database);
-  let sent = 0;
-  let parked = 0;
+  let sent = edits.sent;
+  let parked = edits.parked;
 
   for (const item of items) {
     let response;
