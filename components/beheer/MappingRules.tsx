@@ -109,7 +109,7 @@ export function MappingRules({
           {!configured
             ? 'De sleutels van Google staan nog niet in de omgeving. Tot dan blijft alles verder gewoon werken.'
             : !keyed
-              ? 'TOKEN_ENCRYPTION_KEY ontbreekt. Het verniewingstoken gaat versleuteld de database in, dus zonder die sleutel wordt er niet gekoppeld.'
+              ? 'TOKEN_ENCRYPTION_KEY ontbreekt. Het vernieuwingstoken gaat versleuteld de database in, dus zonder die sleutel wordt er niet gekoppeld.'
               : connected
                 ? 'Twee keer per dag komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'
                 : 'Na koppelen komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'}

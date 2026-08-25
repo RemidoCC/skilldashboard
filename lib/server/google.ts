@@ -99,7 +99,7 @@ export async function exchangeCode(
       error:
         body.error_description ??
         body.error ??
-        'Google gaf geen verniewingstoken terug. Verbreek de koppeling in je Google-account en probeer opnieuw.',
+        'Google gaf geen vernieuwingstoken terug. Verbreek de koppeling in je Google-account en probeer opnieuw.',
     };
   }
 
