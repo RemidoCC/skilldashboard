@@ -35,6 +35,7 @@ psql "$CONN dbname=$DB" -v ON_ERROR_STOP=1 -q \
   -f supabase/migrations/0006_rust_and_freezes.sql \
   -f supabase/migrations/0007_quest_progress.sql \
   -f supabase/migrations/0008_integration_visibility.sql \
+  -f supabase/migrations/0009_revert_completion.sql \
   -f supabase/tests/grants.sql
 
 echo "postgresql:///$DB?host=$SOCKET_DIR&port=$PORT&user=postgres"

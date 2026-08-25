@@ -31,6 +31,7 @@ npm run dev
 | `npm run build:verify` / `start:verify` | Production build on port 3100, in its own `.next-prod` so it does not tread on a running dev server |
 | `npm run verify:offline` | Drives Vandaag in a browser with the network cut |
 | `npm run verify:beheer` | Same, for the edits made in Beheer |
+| `npm run verify:additions` | Reverting, the Sunday capacity pick, sign-out, picking your three |
 | `npm run verify:pwa` | Checks the installability criteria one by one |
 | `npm run screenshots` / `icons` | Regenerates `docs/screenshots/` and the app icons |
 
@@ -77,6 +78,15 @@ level-up and a single completion can cascade several levels.
 
 **Floors.** `floor_level` is claimed each time a skill crosses a multiple of 5,
 and floors are permanent. Rust can never take a skill below one.
+
+**A completion can be taken back.** `public.revert_completion` removes the
+entry and everything it set in motion — a quest it advanced, the bonus it paid,
+a suggestion it accepted — then replays what is left. The levels are never
+adjusted by hand: the ledger is authoritative, so `recalculate_levels` rebuilds
+them. It is the one caller that rebuilds **floors** too, because a floor bought
+by a mis-tap was never earned. Rust and quest bonuses refuse to be reverted
+directly: neither is something you did, so you undo the completion that caused
+them instead.
 
 **Rust lives in the ledger.** Decay is written as a `log_entries` row with
 `source = 'rust'` and a negative amount — exactly the XP standing in the
@@ -151,6 +161,13 @@ the day's XP.
 three held. Spent on the day that would otherwise have broken the streak, and
 the day it covered is named on the screen: a freeze that quietly saved a run
 would make it read as unbroken effort.
+
+**The week's capacity is chosen in the Sunday report**, for the *coming* week —
+Sunday evening is when you know what next week looks like, and it is written
+immediately rather than waiting for "Neem over". Beheer keeps the same control
+for the current week. Without this the setting stayed on `normaal` forever and
+the whole mechanic it drives — quest targets ×0.5 / ×0.75, rust grace of
+14/10/21 days — never moved.
 
 **The Sunday report** is computed when it is asked for rather than stored — it
 derives entirely from the ledger, so a live one can never be stale. It is on
@@ -323,6 +340,9 @@ none of this can drift.
       queues offline like a completion.
 - [x] **Phase 4 — Rhythm.** Quests, rust, freezes, the Sunday report, seasons,
       goal proposals and the two cron jobs.
+- [x] **After the five phases.** Reverting a completion, the Sunday capacity
+      pick, signing out (which clears the device copy), and putting a task on
+      today without leaving Vandaag.
 - [x] **Phase 5 — Integrations.** Google OAuth, the twice-daily sync, the
       inbox, and mapping rules. Waiting only on credentials.
 
@@ -333,7 +353,7 @@ their tests are already in place so that phase is not blocked.
 
 ### Measured
 
-On the production build, throttled mobile: performance 99, accessibility 100,
+On the production build, throttled mobile: performance 95–100 across runs, accessibility 100,
 best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 — Lighthouse dropped its PWA category in v12, so those are checked directly
 against what Chromium actually requires. Both offline suites pass (13 checks on

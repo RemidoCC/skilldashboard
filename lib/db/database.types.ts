@@ -261,7 +261,11 @@ export type Database = {
     };
     Views: Record<never, never>;
     Functions: {
-      recalculate_levels: { Args: { p_user: string }; Returns: undefined };
+      recalculate_levels: {
+        Args: { p_user: string; p_rebuild_floors?: boolean };
+        Returns: undefined;
+      };
+      revert_completion: { Args: { p_entry: string }; Returns: undefined };
       seed_default_skills: { Args: { p_user: string }; Returns: undefined };
       xp_needed: { Args: { p_level: number }; Returns: number };
       apply_xp: {

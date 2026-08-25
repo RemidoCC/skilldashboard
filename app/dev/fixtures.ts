@@ -126,7 +126,18 @@ export const archivedTask: Task = {
   archived: true,
 };
 
-export const allTasks: Task[] = [...tasks, archivedTask];
+/** Not on today, so the preview exercises picking one. */
+export const spareTask: Task = {
+  id: 'eeee1111-eeee-4eee-8eee-eeeeeeee1111',
+  skillId: skills[2].id,
+  title: 'Voorlezen',
+  kind: 'check',
+  value: 15,
+  onToday: false,
+  archived: false,
+};
+
+export const allTasks: Task[] = [...tasks, spareTask, archivedTask];
 
 export const goals: Goal[] = [
   {

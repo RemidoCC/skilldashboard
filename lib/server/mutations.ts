@@ -380,6 +380,21 @@ export async function applyMutation(mutation: Mutation): Promise<MutationOutcome
       return error ? wobble(`Koppelregel verwijderen mislukte: ${error.message}`) : { ok: true };
     }
 
+    case 'entry.revert': {
+      if (!isUuid(mutation.id)) return bad('Ongeldige registratie.');
+
+      const { error } = await supabase.rpc('revert_completion', { p_entry: mutation.id });
+      if (!error) return { ok: true };
+
+      // The function raises for anything it refuses on principle — rust, a
+      // quest bonus, a row that is already gone. Those are final, not worth
+      // retrying, and the message is written to be shown as-is.
+      const final = /roest|opdrachtbonus|bestaat niet meer/i.test(error.message);
+      return final
+        ? bad(error.message)
+        : wobble(`Terugdraaien mislukte: ${error.message}`);
+    }
+
     default:
       return bad('Onbekende wijziging.');
   }

@@ -5,6 +5,13 @@ import { useOffline } from '@/components/offline/OfflineProvider';
 import { weekComparison, type WeekReport as Report } from '@/lib/domain/report';
 import { QUESTS_PER_WEEK, type ProposedQuest } from '@/lib/domain/quests';
 import { readableDay } from '@/lib/domain/dates';
+import type { Capacity } from '@/lib/domain/types';
+
+const CAPACITIES: { value: Capacity; label: string; hint: string }[] = [
+  { value: 'rustig', label: 'Rustig', hint: 'kleinere opdrachten, veertien dagen voor roest' },
+  { value: 'normaal', label: 'Normaal', hint: 'volle opdrachten, tien dagen voor roest' },
+  { value: 'gek', label: 'Gek', hint: 'kleinere opdrachten, eenentwintig dagen voor roest' },
+];
 
 const DISMISS_PREFIX = 'skillunit.report.';
 
@@ -20,12 +27,15 @@ export function WeekReport({
   candidates,
   nextWeekStart,
   reportKey,
+  nextCapacity,
 }: {
   report: Report;
   /** Every skill, ranked. Swapping walks down this list. */
   candidates: ProposedQuest[];
   nextWeekStart: string;
   reportKey: string;
+  /** What the coming week is already set to, if anything. */
+  nextCapacity: Capacity;
 }) {
   const { mutate } = useOffline();
   const [dismissed, setDismissed] = useState(true);
@@ -33,6 +43,7 @@ export function WeekReport({
   const [chosen, setChosen] = useState<string[]>(() =>
     candidates.slice(0, QUESTS_PER_WEEK).map((q) => q.skillId),
   );
+  const [capacity, setCapacity] = useState<Capacity>(nextCapacity);
 
   // Read on mount so the server and the first client render agree.
   useEffect(() => {
@@ -56,6 +67,17 @@ export function WeekReport({
     } catch {
       // Storage blocked; it will simply show again.
     }
+  }
+
+  /**
+   * The coming week's setting, chosen here because Sunday evening is when you
+   * know what next week looks like. Written straight away rather than waiting
+   * for "Neem over", so picking it is worth something even if you close the
+   * report without accepting the quests.
+   */
+  async function chooseCapacity(next: Capacity) {
+    setCapacity(next);
+    await mutate({ kind: 'week.capacity', weekStart: nextWeekStart, capacity: next });
   }
 
   /** Swaps one proposal for the next-best skill not already on the list. */
@@ -144,6 +166,34 @@ export function WeekReport({
           {report.balanceSentence}
         </p>
       ) : null}
+
+      {/* ------------------------------------------------------ de weekstand -- */}
+      <fieldset className="mt-4">
+        <legend className="label">Hoe wordt de komende week</legend>
+        <div className="mt-1.5 flex gap-1.5">
+          {CAPACITIES.map((option) => {
+            const selected = option.value === capacity;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => void chooseCapacity(option.value)}
+                aria-pressed={selected}
+                className="raised h-11 flex-1 px-2 text-[12px]"
+                style={{
+                  background: selected ? 'var(--ink)' : undefined,
+                  color: selected ? 'var(--panel)' : 'var(--ink)',
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-[12px]" style={{ color: 'var(--muted)' }}>
+          {CAPACITIES.find((c) => c.value === capacity)?.hint}
+        </p>
+      </fieldset>
 
       {/* --------------------------------------------------- de opdrachten -- */}
       <div className="mt-4">

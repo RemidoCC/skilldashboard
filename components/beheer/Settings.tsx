@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { HAPTICS_KEY, SOUND_KEY, click, setPreference, hapticsEnabled, soundEnabled } from '@/lib/feedback';
 import { THEME_STORAGE_KEY, type ThemePreference } from '@/lib/theme';
+import { SignOut } from './SignOut';
 import type { Capacity } from '@/lib/domain/types';
 
 const CAPACITIES: { value: Capacity; label: string; hint: string }[] = [
@@ -56,7 +57,8 @@ function Toggle({
       type="button"
       role="switch"
       aria-checked={on}
-      aria-label={label}
+      // Starts with the visible word, so "klik Aan" reaches it (WCAG 2.5.3).
+      aria-label={`${on ? 'Aan' : 'Uit'}, ${label}`}
       onClick={() => onChange(!on)}
       className="recess h-11 shrink-0 px-3 text-[12px]"
       style={{
@@ -221,6 +223,8 @@ export function Settings({ capacity, weekStart }: { capacity: Capacity; weekStar
           })}
         </div>
       </fieldset>
+
+      <SignOut />
 
       <div className="mt-4">
         <span className="label">Export</span>

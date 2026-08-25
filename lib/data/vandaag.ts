@@ -70,6 +70,8 @@ export interface VandaagData {
   /** Present only inside the window the report is on offer. */
   report: WeekReport | null;
   reportKey: string;
+  /** The coming week's setting, which the Sunday report lets you pick. */
+  nextCapacity: Capacity;
   /** Empty when Google is not connected, so the inbox simply does not appear. */
   inbox: InboxRow[];
 }
@@ -88,6 +90,7 @@ export async function loadVandaag(): Promise<VandaagData> {
     tasksRes,
     entriesRes,
     weekRes,
+    nextWeekRes,
     seasonRes,
     questsRes,
     goalsRes,
@@ -102,6 +105,7 @@ export async function loadVandaag(): Promise<VandaagData> {
         .gte('created_at', `${since}T00:00:00Z`)
         .order('created_at', { ascending: false }),
       supabase.from('week_settings').select('*').eq('week_start', week).maybeSingle(),
+      supabase.from('week_settings').select('*').eq('week_start', nextWeek).maybeSingle(),
       supabase
         .from('seasons')
         .select('*')
@@ -234,6 +238,7 @@ export async function loadVandaag(): Promise<VandaagData> {
     goals,
     report,
     reportKey: reportKey(today, new Date().getDay() === 1),
+    nextCapacity: toCapacity(nextWeekRes.data?.capacity),
     freezes,
     frozenDays: streak.frozenDays,
     questCandidates,

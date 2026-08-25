@@ -12,10 +12,12 @@ import { Goals } from '@/components/vandaag/Goals';
 import { WeekReport } from '@/components/vandaag/WeekReport';
 import { FreezeNote } from '@/components/vandaag/FreezeNote';
 import { Inbox } from '@/components/vandaag/Inbox';
+import { PickThree } from '@/components/vandaag/PickThree';
 import {
   balanceSentence,
   frozenDays,
   heldFreezes,
+  allTasks,
   inbox,
   nextWeekStart,
   openGoals,
@@ -52,6 +54,7 @@ export default function DevVandaagPage() {
           candidates={questCandidates}
           nextWeekStart={nextWeekStart}
           reportKey="dev-preview"
+          nextCapacity="normaal"
         />
 
         <Instrument
@@ -82,6 +85,12 @@ export default function DevVandaagPage() {
               );
             })}
           </ul>
+          <PickThree
+            tasks={allTasks.filter((t) => !t.onToday && !t.archived)}
+            skills={skills}
+            limit={3}
+            chosen={tasks.length}
+          />
         </section>
 
         <Inbox items={inbox} skills={skills} />

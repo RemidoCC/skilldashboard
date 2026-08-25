@@ -15,6 +15,7 @@ import { Goals } from '@/components/vandaag/Goals';
 import { WeekReport } from '@/components/vandaag/WeekReport';
 import { FreezeNote } from '@/components/vandaag/FreezeNote';
 import { Inbox } from '@/components/vandaag/Inbox';
+import { PickThree } from '@/components/vandaag/PickThree';
 
 /** Reads live state on every visit; nothing here is worth caching. */
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,7 @@ export default async function VandaagPage() {
             candidates={data.questCandidates}
             nextWeekStart={data.nextWeekStart}
             reportKey={data.reportKey}
+            nextCapacity={data.nextCapacity}
           />
         ) : null}
 
@@ -99,6 +101,12 @@ export default async function VandaagPage() {
               })}
             </ul>
           )}
+          <PickThree
+            tasks={data.tasks.filter((t) => !t.onToday && !t.archived)}
+            skills={data.skills}
+            limit={TODAY_LIMIT}
+            chosen={today.length}
+          />
         </section>
 
         {/* Absent entirely when Google is not connected. */}

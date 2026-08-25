@@ -176,6 +176,8 @@ export function describeMutation(mutation: Mutation): string {
       return `Nieuwe koppelregel "${mutation.rule.pattern}"`;
     case 'rule.delete':
       return 'Verwijderde koppelregel';
+    case 'entry.revert':
+      return 'Teruggedraaide registratie';
   }
 }
 

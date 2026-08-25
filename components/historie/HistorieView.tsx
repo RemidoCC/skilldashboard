@@ -1,4 +1,5 @@
 import { Sparkline } from './Sparkline';
+import { RevertButton } from './RevertButton';
 import { WINDOW_DAYS } from '@/lib/domain/trajectory';
 import { readableDay } from '@/lib/domain/dates';
 import type { LogDay, SkillTrajectory } from '@/lib/domain/trajectory';
@@ -118,6 +119,13 @@ export function HistorieView({ data }: { data: HistorieViewData }) {
                           {entry.note}
                         </p>
                       ) : null}
+                      {/* Rust is the system's, and a quest bonus is a
+                          consequence; neither is yours to take back. */}
+                      {entry.source === 'rust' || entry.source === 'quest' ? null : (
+                        <div className="mt-1.5">
+                          <RevertButton entryId={entry.id} title={entry.title} />
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -154,7 +154,7 @@ export function TimerTask({
           <button
             type="button"
             onClick={start}
-            aria-label={`Timer starten voor ${task.title}`}
+            aria-label={`Start timer voor ${task.title}`}
             className="recess h-11 min-w-11 shrink-0 px-3 text-[12px]"
           >
             Start

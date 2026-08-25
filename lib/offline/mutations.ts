@@ -20,7 +20,8 @@ export type Mutation =
   | { kind: 'quest.accept'; weekStart: string; quests: AcceptedQuest[] }
   | { kind: 'inbox.resolve'; id: string; accept: boolean }
   | { kind: 'rule.create'; id: string; rule: NewMappingRule }
-  | { kind: 'rule.delete'; id: string };
+  | { kind: 'rule.delete'; id: string }
+  | { kind: 'entry.revert'; id: string };
 
 export interface NewMappingRule {
   source: 'calendar' | 'mail';
@@ -244,6 +245,7 @@ export function applyMutations(
         break;
       }
       case 'quest.accept':
+      case 'entry.revert':
       case 'inbox.resolve': {
         // Neither is part of the Beheer state this fold describes; both are
         // read from the server after the queue drains.

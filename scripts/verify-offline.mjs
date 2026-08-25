@@ -52,11 +52,12 @@ const queued = await queueCount();
 if (queued !== 1) fail(`expected 1 queued write, found ${queued}`);
 else pass('write is sitting in IndexedDB');
 
-const bar = await page.locator('text=in de wachtrij').count();
-if (bar !== 1) fail('the sync bar did not report the queue');
-else pass('sync bar reports the queue');
+const bar = page.locator('section[aria-label="Verbinding"]');
+if ((await bar.locator('text=in de wachtrij').count()) !== 1) {
+  fail('the sync bar did not report the queue');
+} else pass('sync bar reports the queue');
 
-const offlineLabel = await page.locator('text=Geen verbinding').count();
+const offlineLabel = await bar.locator('text=Geen verbinding').count();
 if (offlineLabel < 1) fail('the sync bar did not report the lost connection');
 else pass('sync bar reports the lost connection');
 

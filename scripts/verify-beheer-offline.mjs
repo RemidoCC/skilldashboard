@@ -62,9 +62,11 @@ const order = queued.map((q) => q.queueId);
 if (order.join('|') !== [...order].sort().join('|')) fail('the queue is not in the order the edits were made');
 else pass('queue holds the order the edits were made');
 
-const bar = await page.locator('text=in de wachtrij').count();
-if (bar !== 1) fail('the sync bar did not report the queued edits');
-else pass('sync bar reports the queued edits');
+// Scoped to the sync bar itself: other copy on the page mentions the queue too.
+const bar = page.locator('section[aria-label="Verbinding"]');
+if ((await bar.locator('text=in de wachtrij').count()) !== 1) {
+  fail('the sync bar did not report the queued edits');
+} else pass('sync bar reports the queued edits');
 
 // --------------------------------------------------- survives a reload --
 await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});

@@ -13,7 +13,9 @@ export function SyncBar() {
   if (failures.length === 0 && queued === 0 && online) return null;
 
   return (
-    <div className="mt-3 space-y-2">
+    // A named region: it reports the state of the connection and the queue, so
+    // it should be addressable rather than an anonymous strip of text.
+    <section aria-label="Verbinding" className="mt-3 space-y-2">
       {queued > 0 || !online ? (
         <div className="recess flex items-center justify-between gap-3 px-3 py-2">
           <span className="label">
@@ -48,6 +50,6 @@ export function SyncBar() {
           </button>
         </div>
       ))}
-    </div>
+    </section>
   );
 }
