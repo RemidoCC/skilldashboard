@@ -1,5 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client, type QueryResultRow } from 'pg';
+import { randomBytes } from 'node:crypto';
+
+import { decryptSecret, encryptSecret } from '@/lib/server/secrets';
+
+// The key is only read when a secret is actually opened, so setting it here is
+// in time for every test below.
+process.env.TOKEN_ENCRYPTION_KEY = randomBytes(32).toString('base64');
 
 /**
  * The refresh token is a long-lived credential for someone's calendar and
@@ -29,8 +36,8 @@ run('integration_accounts is closed to the client', () => {
     ]);
     await db.query(
       `insert into public.integration_accounts (user_id, provider, refresh_token, scopes)
-       values ($1, 'google', 'SECRET-TOKEN', 'scope')`,
-      [userId],
+       values ($1, 'google', $2, 'scope')`,
+      [userId, encryptSecret('SECRET-TOKEN')],
     );
   });
 
@@ -93,7 +100,26 @@ run('integration_accounts is closed to the client', () => {
       [userId],
     );
     await db.query(`reset role`);
-    expect(rows[0].refresh_token).toBe('SECRET-TOKEN');
+    // Ciphertext even to the role that is allowed to read it: RLS decides who
+    // may look, encryption decides whether looking is worth anything.
+    expect(rows[0].refresh_token).not.toContain('SECRET-TOKEN');
+    expect(decryptSecret(rows[0].refresh_token)).toBe('SECRET-TOKEN');
+  });
+
+  it.each([
+    ['plaintext', '1//0gPlainRefreshToken'],
+    ['empty', ''],
+    ['almost right', 'v1.only.three'],
+    ['wrong version', 'v0.aa.bb.cc'],
+  ])('refuses to store a %s token, even as the service role', async (_label, token) => {
+    await db.query(`set role service_role`);
+    const attempt = db.query(
+      `insert into public.integration_accounts (user_id, provider, refresh_token, scopes)
+         values ($1, 'other', $2, 'scope')`,
+      [userId, token],
+    );
+    await expect(attempt).rejects.toThrow(/refresh_token_encrypted/);
+    await db.query(`reset role`);
   });
 });
 

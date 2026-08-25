@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { accessTokenFor, fetchCalendarEvents, fetchSentMail, googleConfig } from './google';
+import { decryptSecret } from './secrets';
 import { dayKey } from '@/lib/domain/dates';
 import {
   suggestFromCalendar,
@@ -57,7 +58,17 @@ export async function runSyncJob(origin: string): Promise<SyncReport> {
   }
 
   for (const account of accounts ?? []) {
-    const token = await accessTokenFor(config, account.refresh_token);
+    let refreshToken: string;
+    try {
+      refreshToken = decryptSecret(account.refresh_token);
+    } catch (cause) {
+      // The key is gone or was changed. Say so plainly; a silent zero-result
+      // run would look like a quiet week rather than a broken connection.
+      changes.push(cause instanceof Error ? cause.message : 'Token onleesbaar.');
+      continue;
+    }
+
+    const token = await accessTokenFor(config, refreshToken);
     if (typeof token !== 'string') {
       changes.push(`Toegang mislukte: ${token.error}`);
       continue;

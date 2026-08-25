@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { currentUser } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revoke } from '@/lib/server/google';
+import { decryptSecret } from '@/lib/server/secrets';
 
 /** Withdraws the connection here and at Google. */
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,16 @@ export async function POST() {
     .eq('provider', 'google')
     .maybeSingle();
 
-  if (data?.refresh_token) await revoke(data.refresh_token);
+  // Revoking at Google needs the token in the clear. If it will not open — a
+  // rotated key, an altered row — the local record still goes, because leaving
+  // a connection the app can no longer use would be the worse outcome.
+  if (data?.refresh_token) {
+    try {
+      await revoke(decryptSecret(data.refresh_token));
+    } catch {
+      // Best effort, same as a revoke call that fails at Google's end.
+    }
+  }
 
   const { error } = await db
     .from('integration_accounts')

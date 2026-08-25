@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 import { toCapacity, toSkill, toTask } from './map';
 import { dayKey, weekStart } from '@/lib/domain/dates';
 import { isGoogleConfigured } from '@/lib/server/google';
+import { isEncryptionConfigured } from '@/lib/server/secrets';
+import { SCHEMA_VERSION, TABLES } from '@/lib/domain/restore';
+import type { Database } from '@/lib/db/database.types';
 import type { Capacity, Skill, Task } from '@/lib/domain/types';
 import type { Goal, MappingRuleRow } from '@/lib/offline/mutations';
 
@@ -17,6 +20,8 @@ export interface BeheerData {
   /** Whether the OAuth credentials exist at all, and whether an account is linked. */
   googleConfigured: boolean;
   googleConnected: boolean;
+  /** Whether a token could be stored safely at all. Without it, no connecting. */
+  googleKeyed: boolean;
 }
 
 /** RLS scopes every query to the signed-in user, so no id is passed. */
@@ -64,40 +69,45 @@ export async function loadBeheer(): Promise<BeheerData> {
     weekStart: week,
     googleConfigured: isGoogleConfigured(),
     googleConnected: Boolean(accountRes.data),
+    googleKeyed: isEncryptionConfigured(),
   };
 }
 
 /**
  * Everything the account holds, for the JSON export.
  *
- * The ledger is the point: with log_entries in hand, recalculate_levels can
- * rebuild every level from scratch, so this file is a real backup rather than
- * a snapshot of derived numbers.
+ * Driven by the same table list the importer reads, and selecting exactly the
+ * columns it will accept. That is what keeps a backup restorable: a column
+ * added to one side and forgotten on the other cannot happen, because there is
+ * only one side.
+ *
+ * The ledger is the point. With log_entries in hand recalculate_levels rebuilds
+ * every level from scratch, so this file is a real backup rather than a
+ * snapshot of derived numbers. `user_id` is not in it: a restore takes its
+ * owner from whoever is signed in.
  */
 export async function loadExport(): Promise<Record<string, unknown>> {
   const supabase = await createClient();
 
-  const [skills, tasks, entries, goals, quests, seasons, weeks, freezes] = await Promise.all([
-    supabase.from('skills').select('*').order('sort_order'),
-    supabase.from('tasks').select('*').order('created_at'),
-    supabase.from('log_entries').select('*').order('created_at'),
-    supabase.from('goals').select('*').order('created_at'),
-    supabase.from('quests').select('*').order('week_start'),
-    supabase.from('seasons').select('*').order('starts_on'),
-    supabase.from('week_settings').select('*').order('week_start'),
-    supabase.from('streak_freezes').select('*').order('earned_week'),
-  ]);
+  const results = await Promise.all(
+    TABLES.map((spec) =>
+      supabase
+        // The spec is deliberately free of database types so the domain layer
+        // stays dependency-free; this is the one place it has to be narrowed.
+        .from(spec.table as keyof Database['public']['Tables'])
+        .select(Object.keys(spec.columns).join(','))
+        .order(spec.orderBy),
+    ),
+  );
 
-  return {
+  const failure = results.find((r) => r.error)?.error;
+  if (failure) throw new Error(`Kon de export niet maken: ${failure.message}`);
+
+  const payload: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),
-    schema: 'skill-unit/1',
-    skills: skills.data ?? [],
-    tasks: tasks.data ?? [],
-    logEntries: entries.data ?? [],
-    goals: goals.data ?? [],
-    quests: quests.data ?? [],
-    seasons: seasons.data ?? [],
-    weekSettings: weeks.data ?? [],
-    streakFreezes: freezes.data ?? [],
+    schema: SCHEMA_VERSION,
   };
+  for (const [index, spec] of TABLES.entries()) payload[spec.key] = results[index].data ?? [];
+
+  return payload;
 }

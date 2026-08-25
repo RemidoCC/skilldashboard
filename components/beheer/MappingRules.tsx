@@ -8,6 +8,23 @@ import type { Skill } from '@/lib/domain/types';
 import type { MappingRuleRow } from '@/lib/offline/mutations';
 
 /**
+ * What the OAuth routes send back in `?google=`.
+ *
+ * Every outcome of an attempt gets a sentence. A consent screen you refused
+ * used to return you to a page that looked exactly as before, which reads as
+ * though the app lost your answer.
+ */
+const STATUS_NOTES: Record<string, string> = {
+  gekoppeld: 'Google is gekoppeld. De eerstvolgende ronde haalt op wat er sinds gisteren was.',
+  geweigerd: 'Toestemming geweigerd. Er is niets gekoppeld en niets opgeslagen.',
+  ongeldig: 'De terugkomst van Google klopte niet. Begin opnieuw met koppelen.',
+  mislukt: 'Koppelen mislukte. Verbreek de toegang in je Google-account en probeer opnieuw.',
+  // niet-ingesteld and geen-sleutel are deliberately absent: those are standing
+  // states, and the paragraph under the panel already explains both. Repeating
+  // it as a notice would say the same thing twice on the same card.
+};
+
+/**
  * Which items from Google belong to which skill.
  *
  * Plain case-insensitive substrings, not patterns: a rule you can read out
@@ -19,17 +36,25 @@ export function MappingRules({
   skills,
   connected,
   configured,
+  keyed,
+  status,
 }: {
   rules: MappingRuleRow[];
   skills: Skill[];
   connected: boolean;
   configured: boolean;
+  keyed: boolean;
+  status: string | null;
 }) {
   const { mutate } = useOffline();
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const active = skills.filter((s) => s.active);
   const byId = new Map(skills.map((s) => [s.id, s]));
+  const note = status ? STATUS_NOTES[status] : null;
+  // Both have to hold before there is anything to connect to: credentials to
+  // ask Google with, and a key to store the answer under.
+  const canConnect = configured && keyed;
 
   async function disconnect() {
     setDisconnecting(true);
@@ -57,7 +82,7 @@ export function MappingRules({
             </span>
           </div>
 
-          {!configured ? (
+          {!canConnect ? (
             <span className="label shrink-0">Niet ingesteld</span>
           ) : connected ? (
             <button
@@ -83,10 +108,22 @@ export function MappingRules({
         <p className="mt-2 text-[12px]" style={{ color: 'var(--muted)' }}>
           {!configured
             ? 'De sleutels van Google staan nog niet in de omgeving. Tot dan blijft alles verder gewoon werken.'
-            : connected
-              ? 'Twee keer per dag komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'
-              : 'Na koppelen komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'}
+            : !keyed
+              ? 'TOKEN_ENCRYPTION_KEY ontbreekt. Het verniewingstoken gaat versleuteld de database in, dus zonder die sleutel wordt er niet gekoppeld.'
+              : connected
+                ? 'Twee keer per dag komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'
+                : 'Na koppelen komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'}
         </p>
+
+        {note ? (
+          <p
+            role="status"
+            className="mt-2 text-[12px]"
+            style={{ color: status === 'gekoppeld' ? 'var(--muted)' : 'var(--signal-text)' }}
+          >
+            {note}
+          </p>
+        ) : null}
       </div>
 
       {/* ------------------------------------------------------- de regels -- */}

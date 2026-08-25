@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { groupByDay, levelTrajectory } from '@/lib/domain/trajectory';
+import {
+  DEFAULT_RANGE,
+  groupByDay,
+  HISTORY_RANGES,
+  levelTrajectory,
+  rangeLabelFor,
+  toHistoryRange,
+  windowStart,
+  type HistoryRange,
+} from '@/lib/domain/trajectory';
 import { xpNeeded } from '@/lib/domain/curve';
+import { daysBetween } from '@/lib/domain/dates';
 import type { LogEntry, Skill } from '@/lib/domain/types';
 
 function skill(id: string, name = id): Skill {
@@ -136,5 +146,59 @@ describe('groupByDay', () => {
     const early = entry('a', 10, '2026-08-24');
     const late = { ...entry('a', 20, '2026-08-24'), createdAt: '2026-08-24T18:00:00.000Z' };
     expect(groupByDay([early, late]).at(0)?.entries[0].id).toBe(late.id);
+  });
+});
+
+/* ------------------------------------------------------------- het raam -- */
+
+describe('the history window', () => {
+  const TODAY = '2026-08-25';
+
+  it('reads a known range from the query string', () => {
+    for (const value of ['30', '90', '365', 'alles']) {
+      expect(toHistoryRange(value)).toBe(value);
+    }
+  });
+
+  it('falls back to ninety days for anything else', () => {
+    for (const value of ['', '45', 'alle', null, undefined, 7, {}]) {
+      expect(toHistoryRange(value)).toBe(DEFAULT_RANGE);
+    }
+    expect(DEFAULT_RANGE).toBe('90');
+  });
+
+  it.each([
+    ['30', '2026-07-27'],
+    ['90', '2026-05-28'],
+    ['365', '2025-08-26'],
+  ])('counts %s days back to and including today', (range, expected) => {
+    expect(windowStart(range as HistoryRange, TODAY, '2020-01-01')).toBe(expected);
+  });
+
+  it('gives a fixed range the number of days it says', () => {
+    for (const option of HISTORY_RANGES) {
+      if (option.days === null) continue;
+      const from = windowStart(option.value, TODAY, '2020-01-01');
+      expect(daysBetween(from, TODAY) + 1, option.value).toBe(option.days);
+    }
+  });
+
+  it('reaches back to the first entry for "alles"', () => {
+    expect(windowStart('alles', TODAY, '2024-02-29')).toBe('2024-02-29');
+  });
+
+  it('still shows a month when the whole account is four days old', () => {
+    // A line across four days is not a line. The empty run-up is honest.
+    expect(windowStart('alles', TODAY, '2026-08-22')).toBe('2026-07-27');
+  });
+
+  it('shows a month when there is nothing at all', () => {
+    expect(windowStart('alles', TODAY, null)).toBe('2026-07-27');
+  });
+
+  it('names every range', () => {
+    for (const option of HISTORY_RANGES) {
+      expect(rangeLabelFor(option.value)).toBe(option.label);
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { groupByDay, levelTrajectory, WINDOW_DAYS } from '@/lib/domain/trajectory';
+import { DEFAULT_RANGE, groupByDay, levelTrajectory, WINDOW_DAYS } from '@/lib/domain/trajectory';
 import { addDays, dayKey, weekStart } from '@/lib/domain/dates';
 import type { LogEntry, Skill, Task } from '@/lib/domain/types';
 import type { Goal } from '@/lib/offline/mutations';
@@ -202,9 +202,35 @@ export const historie = {
   trajectories: levelTrajectory(skills, entries, from, TODAY),
   days: groupByDay(entries).slice(0, 4),
   skillNames: new Map(skills.map((s) => [s.id, s.name])),
+  range: DEFAULT_RANGE,
+  from,
+  to: TODAY,
   seasons: [
+    // One season with a summary and one without, so the preview shows both the
+    // panel and what a season from before phase four falls back to.
     {
       id: 's1',
+      user_id: 'fixture',
+      name: 'S02',
+      starts_on: '2026-06-01',
+      ends_on: '2026-08-23',
+      badge_slug: 's02-hersteld',
+      summary: {
+        theme: 'hersteld',
+        totalXp: 8420,
+        levelsGained: 11,
+        questsCompleted: 9,
+        longestStreak: 23,
+        perSkill: [
+          { skillId: skills[0].id, name: skills[0].name, xp: 3120, levelsGained: 4 },
+          { skillId: skills[1].id, name: skills[1].name, xp: 2980, levelsGained: 4 },
+          { skillId: skills[2].id, name: skills[2].name, xp: 1740, levelsGained: 2 },
+          { skillId: skills[3].id, name: skills[3].name, xp: 580, levelsGained: 1 },
+        ],
+      },
+    },
+    {
+      id: 's2',
       user_id: 'fixture',
       name: 'S01',
       starts_on: '2026-03-02',

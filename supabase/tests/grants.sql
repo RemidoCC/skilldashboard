@@ -20,3 +20,11 @@ revoke select on public.integration_accounts from authenticated, anon;
 grant select (user_id, provider, scopes, connected_at)
   on public.integration_accounts to authenticated;
 revoke insert, update, delete on public.integration_accounts from authenticated, anon;
+
+-- Supabase hands the client roles usage on the auth schema and execute on
+-- auth.uid() (verified against the hosted project). Without them, a
+-- security-invoker function that calls auth.uid() fails here with "permission
+-- denied for schema auth" while working perfectly in production — a harness
+-- gap that reads exactly like a product bug.
+grant usage on schema auth to anon, authenticated, service_role;
+grant execute on function auth.uid() to public;

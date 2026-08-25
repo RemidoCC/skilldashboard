@@ -32,6 +32,7 @@ npm run dev
 | `npm run verify:offline` | Drives Vandaag in a browser with the network cut |
 | `npm run verify:beheer` | Same, for the edits made in Beheer |
 | `npm run verify:additions` | Reverting, the Sunday capacity pick, sign-out, picking your three |
+| `npm run verify:hardening` | The key gate, the restore flow, the season summary, the window |
 | `npm run verify:pwa` | Checks the installability criteria one by one |
 | `npm run screenshots` / `icons` | Regenerates `docs/screenshots/` and the app icons |
 
@@ -49,6 +50,7 @@ app/                    routes; /vandaag is the home screen
   api/completions/      completions in
   api/mutations/        edits from Beheer
   api/export/           the whole account as JSON
+  api/import/           the same JSON, read back in
   api/cron/             the scheduled jobs, behind a bearer token
   api/integrations/     the Google OAuth flow
   dev/                  visual preview against fixtures, 404s in production
@@ -118,10 +120,10 @@ offline queue in phase 2 will depend on.
 
 **Beheer** covers tasks (create, edit, put on today, archive and restore),
 skills (switch on and off, edit, add custom ones from the fixed glyph set),
-goals, and settings — sound, haptics, night panel, week capacity and the JSON
-export. Two warnings are the point of the screen rather than decoration: more
-than three tasks on today, and more than six skills active, both stated plainly
-with what to do about it.
+goals, and settings — sound, haptics, night panel, week capacity, and the JSON
+export with the restore that reads it back. Two warnings are the point of the
+screen rather than decoration: more than three tasks on today, and more than six
+skills active, both stated plainly with what to do about it.
 
 **Historie** shows a level trajectory per skill as small multiples — step
 lines, not curves, because a level is a whole number that changes on a day and
@@ -129,10 +131,52 @@ smoothing would imply a continuity that is not there. Each chart is scaled to
 its own skill with the range printed beside it; a shared axis would flatten a
 young skill into a flat line. A skill that climbed and then rusted back reports
 its peak, so the window does not read as though nothing happened. Below that,
-the ledger by day with its notes, and the season badges earned.
+the ledger by day with its notes, and the seasons that have finished.
+
+The window is **30 days, 90, a year or everything**, as a plain query parameter
+(`/historie?dagen=alles`) so it survives a reload and a bookmark and works with
+no JavaScript running. Ninety days is a season, which is the unit the app thinks
+in — but a season that has just ended falls off the front of it, which is the
+one moment you most want to look back. "Alles" reaches to the first thing ever
+logged and never shows less than a month, because a line across four days is not
+a line.
+
+A finished season shows **what it consisted of**: the theme word with the
+sentence that explains it, total XP, levels gained, quests completed, the
+longest streak, and the split per skill. The summary has been written at the end
+of every season since phase four; showing it is what turns the badge from a word
+into a reading. A season from before the summary existed says so rather than
+displaying zeroes.
 
 The trajectory replays the **whole** ledger, not just the window: a level on
 day one of the window depends on everything before it.
+
+### The export, and the way back
+
+`GET /api/export` is the whole account as JSON, the ledger included, so every
+level can be rebuilt from it. `POST /api/import` reads one back.
+
+Both sides are driven by the **same table list** (`lib/domain/restore.ts`), which
+names each table, the columns that may travel, and the order that satisfies the
+foreign keys. A column added to one side and forgotten on the other cannot
+happen, because there is only one side.
+
+Three things stand between a file and the database:
+
+- The reader strips the payload to columns that exist and refuses anything else,
+  naming the table and the row. `user_id` is **not** in any allowlist: a file
+  claiming to belong to someone else restores into your own account or not at
+  all.
+- `restore_account` does the whole replacement in one transaction, so a failure
+  halfway leaves the account it started with rather than half of each. It takes
+  the owner from `auth.uid()` and runs `security invoker`, so RLS checks the
+  same thing again.
+- Levels are then rebuilt from the restored ledger, not read from the file. A
+  file with hand-edited levels restores to what its history actually supports.
+  Floors are left alone; a floor once earned is not given back.
+
+A restore replaces rather than merges, and the screen says so before the second
+tap: what is in the file, in counts, and what is about to go, in words.
 
 ## Rhythm
 
@@ -239,7 +283,9 @@ else works exactly as before.
 
 The token is a long-lived credential for a calendar and a mailbox, so the rule
 that it never reaches the client is enforced in the database rather than in the
-data layer — one careless `select *` should not be able to leak it.
+data layer — one careless `select *` should not be able to leak it. And because
+RLS is a property of the connection rather than of the bytes, it is also
+**encrypted at rest**.
 
 `integration_accounts` has RLS with a row policy, the table-level `SELECT`
 revoked, and only the four harmless columns granted back. Beheer can therefore
@@ -253,6 +299,23 @@ This is easy to get wrong, and the first attempt here was: `grant select on
 readable. Only revoking the table grant and then granting the safe columns
 holds. `tests/integration-security.test.ts` pins it against a real Postgres,
 including that `select *` fails.
+
+RLS still leaves the token in the clear to anyone holding a dump, a restored
+backup, or the service-role key. So `lib/server/secrets.ts` encrypts it with
+AES-256-GCM under `TOKEN_ENCRYPTION_KEY`, which lives in the environment and
+never in the database — holding one without the other is worth nothing. A
+tampered value fails to decrypt rather than decrypting to something else.
+
+Two guards make this hold rather than merely intend it. The database has a
+check constraint that refuses anything not shaped like ciphertext, so no future
+code path can quietly write a plaintext token. And the app refuses to start the
+consent flow at all without a key: asking Google for a token there is no way to
+protect would be worse than not asking. Beheer says which of the two is missing
+— the Google credentials, or the key — rather than a single "niet ingesteld".
+
+Rotating the key makes an existing connection unreadable. The sync job says so
+in as many words instead of returning nothing, which would read as a quiet week
+rather than a broken connection.
 
 ## Offline
 
@@ -345,6 +408,8 @@ none of this can drift.
       today without leaving Vandaag.
 - [x] **Phase 5 — Integrations.** Google OAuth, the twice-daily sync, the
       inbox, and mapping rules. Waiting only on credentials.
+- [x] **Hardening.** The refresh token encrypted at rest, a restore path for
+      the export, the season summary shown, and a Historie window you can open.
 
 Rust and freeze storage were open after phase 1 and are now settled — see
 [The rules](#the-rules). The mechanics themselves (the decay job, the weekly
@@ -356,8 +421,9 @@ their tests are already in place so that phase is not blocked.
 On the production build, throttled mobile: performance 95–100 across runs, accessibility 100,
 best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 — Lighthouse dropped its PWA category in v12, so those are checked directly
-against what Chromium actually requires. Both offline suites pass (13 checks on
-Vandaag, 10 on Beheer), and the cron routes refuse an unsigned call.
+against what Chromium actually requires. All four browser suites pass (13 checks on
+Vandaag, 10 on Beheer, 9 on the additions, 24 on the hardening), and the cron
+routes refuse an unsigned call.
 
 **Phase 5 is code-complete but unconnected**: `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` are not set, so no real consent screen, token exchange

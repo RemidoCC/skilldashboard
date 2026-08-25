@@ -2,8 +2,52 @@ import { applyXp, START } from './curve';
 import { addDays, dayKey, daysBetween } from './dates';
 import type { LogEntry, Progress, Skill } from './types';
 
-/** How far back Historie looks. Long enough to show a season, short enough to stay quick. */
+/** What Historie looks at unless you say otherwise: one season's worth. */
 export const WINDOW_DAYS = 90;
+
+export type HistoryRange = '30' | '90' | '365' | 'alles';
+
+/**
+ * How far back Historie may look.
+ *
+ * Ninety days is a season, which is the unit this app thinks in, but a season
+ * that has just ended falls off the front of it — the one moment you most want
+ * to look back. So the window opens.
+ */
+export const HISTORY_RANGES: readonly { value: HistoryRange; label: string; days: number | null }[] =
+  [
+    { value: '30', label: '30 dagen', days: 30 },
+    { value: '90', label: '90 dagen', days: WINDOW_DAYS },
+    { value: '365', label: 'Een jaar', days: 365 },
+    { value: 'alles', label: 'Alles', days: null },
+  ];
+
+export const DEFAULT_RANGE: HistoryRange = '90';
+
+/** Anything else in the query string reads as the default rather than an error. */
+export function toHistoryRange(raw: unknown): HistoryRange {
+  return HISTORY_RANGES.some((r) => r.value === raw) ? (raw as HistoryRange) : DEFAULT_RANGE;
+}
+
+export function rangeLabelFor(range: HistoryRange): string {
+  return HISTORY_RANGES.find((r) => r.value === range)?.label ?? '';
+}
+
+/**
+ * The first day of the window.
+ *
+ * "Alles" reaches back to the first thing ever logged, but never shows less
+ * than a month: a line drawn across four days is a line you cannot read, and
+ * the empty days in front of it are the truth about the account anyway.
+ */
+export function windowStart(range: HistoryRange, today: string, earliest: string | null): string {
+  const days = HISTORY_RANGES.find((r) => r.value === range)?.days ?? null;
+  if (days !== null) return addDays(today, -(days - 1));
+
+  const floor = addDays(today, -29);
+  if (!earliest) return floor;
+  return earliest < floor ? earliest : floor;
+}
 
 export interface TrajectoryPoint {
   day: string;

@@ -266,6 +266,7 @@ export type Database = {
         Returns: undefined;
       };
       revert_completion: { Args: { p_entry: string }; Returns: undefined };
+      restore_account: { Args: { p_payload: Json }; Returns: undefined };
       seed_default_skills: { Args: { p_user: string }; Returns: undefined };
       xp_needed: { Args: { p_level: number }; Returns: number };
       apply_xp: {

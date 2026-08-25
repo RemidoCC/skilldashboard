@@ -5,14 +5,22 @@ import { Header } from '@/components/shell/Header';
 import { BottomNav } from '@/components/shell/BottomNav';
 import { SyncBar } from '@/components/offline/SyncBar';
 import { HistorieView } from '@/components/historie/HistorieView';
+import { toHistoryRange } from '@/lib/domain/trajectory';
 
 export const dynamic = 'force-dynamic';
 
-export default async function HistoriePage() {
+export default async function HistoriePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await currentUser();
   if (!user) redirect('/login');
 
-  const data = await loadHistorie();
+  // A plain query parameter, so the window survives a reload, a bookmark and a
+  // browser with no JavaScript running yet.
+  const { dagen } = await searchParams;
+  const data = await loadHistorie(toHistoryRange(dagen));
 
   return (
     <>

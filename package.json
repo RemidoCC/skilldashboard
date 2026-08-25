@@ -18,7 +18,8 @@
     "build:verify": "NEXT_DIST_DIR=.next-prod next build",
     "start:verify": "NEXT_DIST_DIR=.next-prod next start -p 3100",
     "verify:beheer": "node scripts/verify-beheer-offline.mjs",
-    "verify:additions": "node scripts/verify-additions.mjs"
+    "verify:additions": "node scripts/verify-additions.mjs",
+    "verify:hardening": "node scripts/verify-hardening.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

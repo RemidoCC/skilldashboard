@@ -121,6 +121,53 @@ export function seasonSummary(
   };
 }
 
+/**
+ * Reading a stored summary back.
+ *
+ * seasons.summary is jsonb, so what comes out of the database is whatever went
+ * in — including from an export someone edited. Every field is checked and a
+ * missing one falls back rather than throwing, because a summary that will not
+ * parse should cost you the panel, not the screen.
+ */
+export function parseSeasonSummary(value: unknown): SeasonSummary | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+
+  const themes: BadgeTheme[] = ['evenwichtig', 'toegespitst', 'hersteld', 'gestaag'];
+  const theme = themes.find((t) => t === raw.theme);
+  if (!theme) return null;
+
+  const whole = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+  const perSkill = Array.isArray(raw.perSkill)
+    ? raw.perSkill
+        .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
+        .map((entry) => ({
+          skillId: typeof entry.skillId === 'string' ? entry.skillId : '',
+          name: typeof entry.name === 'string' ? entry.name : 'Onbekend',
+          xp: whole(entry.xp),
+          levelsGained: whole(entry.levelsGained),
+        }))
+    : [];
+
+  return {
+    theme,
+    totalXp: whole(raw.totalXp),
+    levelsGained: whole(raw.levelsGained),
+    perSkill,
+    questsCompleted: whole(raw.questsCompleted),
+    longestStreak: whole(raw.longestStreak),
+  };
+}
+
+/** What the badge word means, said plainly rather than left to be guessed. */
+export const THEME_NOTES: Record<BadgeTheme, string> = {
+  evenwichtig: 'geen vaardigheid nam meer dan vier tiende van het seizoen',
+  toegespitst: 'meer dan de helft ging naar één vaardigheid',
+  hersteld: 'een vaardigheid roestte en kwam er weer bovenop',
+  gestaag: 'verdeeld, zonder uitschieter',
+};
+
 /** Skills that were active at the end of the season, for the tally. */
 export function tallySkills(skills: readonly Skill[]): Skill[] {
   return skills.filter((s) => s.active);

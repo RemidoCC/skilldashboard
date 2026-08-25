@@ -8,11 +8,18 @@ import { BeheerBoard } from '@/components/beheer/BeheerBoard';
 
 export const dynamic = 'force-dynamic';
 
-export default async function BeheerPage() {
+export default async function BeheerPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await currentUser();
   if (!user) redirect('/login');
 
-  const data = await loadBeheer();
+  const [data, params] = await Promise.all([loadBeheer(), searchParams]);
+  // Set by the OAuth routes on the way back. Without it a refused consent
+  // simply returns you to a screen that looks unchanged.
+  const googleStatus = typeof params.google === 'string' ? params.google : null;
 
   return (
     <>
@@ -32,6 +39,8 @@ export default async function BeheerPage() {
             weekStart={data.weekStart}
             googleConfigured={data.googleConfigured}
             googleConnected={data.googleConnected}
+            googleKeyed={data.googleKeyed}
+            googleStatus={googleStatus}
           />
         </div>
       </main>

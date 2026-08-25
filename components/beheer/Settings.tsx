@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { HAPTICS_KEY, SOUND_KEY, click, setPreference, hapticsEnabled, soundEnabled } from '@/lib/feedback';
 import { THEME_STORAGE_KEY, type ThemePreference } from '@/lib/theme';
+import { checkRestore, restoreCounts } from '@/lib/domain/restore';
 import { SignOut } from './SignOut';
 import type { Capacity } from '@/lib/domain/types';
 
@@ -249,6 +250,161 @@ export function Settings({ capacity, weekStart }: { capacity: Capacity; weekStar
           </button>
         </div>
       </div>
+
+      <Restore />
     </section>
+  );
+}
+
+/**
+ * Reading an export back in.
+ *
+ * The only destructive thing in the app, so it behaves like one: the file is
+ * checked before anything is asked, the confirmation says in numbers what is
+ * about to arrive and in words what is about to go, and the last tap is a
+ * separate one. The same check runs again on the server — this one is here so
+ * you find out about a bad file before you commit to anything.
+ */
+function Restore() {
+  const [file, setFile] = useState<{ name: string; text: string; counts: [string, number][] } | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function choose(event: React.ChangeEvent<HTMLInputElement>) {
+    const chosen = event.target.files?.[0];
+    setError(null);
+    setConfirming(false);
+    setFile(null);
+    if (!chosen) return;
+
+    const text = await chosen.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      setError('Dit bestand is geen leesbare JSON.');
+      return;
+    }
+
+    const check = checkRestore(parsed);
+    if (!check.ok) {
+      setError(check.error);
+      return;
+    }
+    setFile({ name: chosen.name, text, counts: restoreCounts(check) });
+  }
+
+  async function send() {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: file.text,
+      });
+      const body = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) {
+        setError(body.error ?? 'Terugzetten mislukte. Er is niets veranderd.');
+        setConfirming(false);
+        return;
+      }
+      // Every screen is now looking at something that no longer exists.
+      location.assign('/vandaag');
+    } catch {
+      setError('Geen verbinding. Terugzetten kan alleen online.');
+      setConfirming(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <span className="label">Terugzetten</span>
+      <p className="mt-1 text-[13px]">
+        Een eerder gedownloade export weer inlezen. Wat er nu staat wordt vervangen, niet
+        aangevuld. De niveaus worden daarna opnieuw uit het logboek berekend.
+      </p>
+
+      {/* The native file control paints its own English button in its own
+          style. The input stays, so the keyboard and the screen reader still
+          find it; the label is what you see, and it carries the focus ring. */}
+      <input
+        id="restore-file"
+        type="file"
+        accept="application/json,.json"
+        onChange={choose}
+        className="peer sr-only"
+      />
+      <div className="mt-2 flex justify-end">
+        <label
+          htmlFor="restore-file"
+          className="raised flex h-11 cursor-pointer items-center px-5 text-[13px] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
+          style={{ outlineColor: 'var(--focus)' }}
+        >
+          Kies een bestand
+        </label>
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }} role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {file ? (
+        <div className="recess mt-2 p-3">
+          <p className="text-[13px]">{file.name}</p>
+          <span className="label mt-0.5 block">
+            {file.counts.map(([name, n]) => `${n} ${name}`).join(' · ')}
+          </span>
+
+          {confirming ? (
+            <div className="mt-2.5">
+              <p className="text-[13px]" style={{ color: 'var(--signal-text)' }}>
+                Alles wat er nu staat verdwijnt: vaardigheden, taken, logboek, seizoenen. Hier is
+                geen weg terug uit.
+              </p>
+              <div className="mt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="label underline underline-offset-2"
+                >
+                  Laat staan
+                </button>
+                <button
+                  type="button"
+                  onClick={send}
+                  disabled={busy}
+                  // The accessible name starts with the visible words, or voice
+                  // control cannot reach the button by what it says (WCAG 2.5.3).
+                  aria-label="Doe maar, alles vervangen door dit bestand"
+                  className="raised h-11 px-5 text-[13px]"
+                  style={{ background: 'var(--signal-fill)', color: 'var(--on-signal)' }}
+                >
+                  {busy ? 'Bezig' : 'Doe maar'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2.5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="raised h-11 px-5 text-[13px]"
+              >
+                Terugzetten
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -4,6 +4,8 @@ import {
   badgeTheme,
   hasEnded,
   nextSeason,
+  parseSeasonSummary,
+  THEME_NOTES,
   seasonEnd,
   seasonLabel,
   seasonName,
@@ -155,5 +157,74 @@ describe('seasonSummary', () => {
   it('counts rust against the total, because it happened', () => {
     const tallies = [tally({ skillId: 'a', xp: 500 }), tally({ skillId: 'b', xp: -200 })];
     expect(seasonSummary(tallies, 0, 0).totalXp).toBe(300);
+  });
+});
+
+/* ------------------------------------------------------- de samenvatting -- */
+
+describe('parseSeasonSummary', () => {
+  const stored = {
+    theme: 'hersteld',
+    totalXp: 8420,
+    levelsGained: 11,
+    questsCompleted: 9,
+    longestStreak: 23,
+    perSkill: [{ skillId: 'a', name: 'Werk', xp: 3120, levelsGained: 4 }],
+  };
+
+  it('reads back exactly what seasonSummary writes', () => {
+    const written = seasonSummary(
+      [
+        { skillId: 'a', name: 'Werk', xp: 3120, levelsGained: 4, recovered: true },
+        { skillId: 'b', name: 'Rust', xp: 580, levelsGained: 1, recovered: false },
+      ],
+      9,
+      23,
+    );
+    // Through jsonb and back, which is the trip it actually makes.
+    expect(parseSeasonSummary(JSON.parse(JSON.stringify(written)))).toEqual(written);
+  });
+
+  it('reads a stored summary', () => {
+    expect(parseSeasonSummary(stored)).toEqual(stored);
+  });
+
+  it('gives up on anything that is not a summary', () => {
+    for (const value of [null, undefined, 'gestaag', 42, [], {}, { theme: 'briljant' }]) {
+      expect(parseSeasonSummary(value)).toBeNull();
+    }
+  });
+
+  it('treats a missing number as zero rather than falling over', () => {
+    const summary = parseSeasonSummary({ theme: 'gestaag' });
+    expect(summary).toEqual({
+      theme: 'gestaag',
+      totalXp: 0,
+      levelsGained: 0,
+      perSkill: [],
+      questsCompleted: 0,
+      longestStreak: 0,
+    });
+  });
+
+  it('skips per-skill entries that are not objects', () => {
+    const summary = parseSeasonSummary({ ...stored, perSkill: ['werk', null, stored.perSkill[0]] });
+    expect(summary?.perSkill).toHaveLength(1);
+  });
+
+  it('names a skill that lost its name', () => {
+    const summary = parseSeasonSummary({ ...stored, perSkill: [{ skillId: 'a', xp: 10 }] });
+    expect(summary?.perSkill[0]).toEqual({
+      skillId: 'a',
+      name: 'Onbekend',
+      xp: 10,
+      levelsGained: 0,
+    });
+  });
+
+  it('has a plain sentence for every theme', () => {
+    for (const theme of ['evenwichtig', 'toegespitst', 'hersteld', 'gestaag'] as const) {
+      expect(THEME_NOTES[theme].length, theme).toBeGreaterThan(10);
+    }
   });
 });

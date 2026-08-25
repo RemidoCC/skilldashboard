@@ -21,11 +21,15 @@ export function BeheerBoard({
   weekStart,
   googleConfigured,
   googleConnected,
+  googleKeyed,
+  googleStatus,
 }: {
   server: BeheerState;
   weekStart: string;
   googleConfigured: boolean;
   googleConnected: boolean;
+  googleKeyed: boolean;
+  googleStatus: string | null;
 }) {
   const { mutations } = useOffline();
   const state = useMemo(() => applyMutations(server, mutations), [server, mutations]);
@@ -46,6 +50,8 @@ export function BeheerBoard({
         skills={state.skills}
         connected={googleConnected}
         configured={googleConfigured}
+        keyed={googleKeyed}
+        status={googleStatus}
       />
 
       <Settings capacity={state.capacity} weekStart={weekStart} />
