@@ -11,10 +11,13 @@ import { Quests } from '@/components/vandaag/Quests';
 import { Goals } from '@/components/vandaag/Goals';
 import { WeekReport } from '@/components/vandaag/WeekReport';
 import { FreezeNote } from '@/components/vandaag/FreezeNote';
+import { Inbox } from '@/components/vandaag/Inbox';
 import {
   balanceSentence,
   frozenDays,
   heldFreezes,
+  inbox,
+  nextWeekStart,
   openGoals,
   questCandidates,
   quests,
@@ -47,7 +50,7 @@ export default function DevVandaagPage() {
         <WeekReport
           report={weekReport}
           candidates={questCandidates}
-          nextWeekStart="2026-08-31"
+          nextWeekStart={nextWeekStart}
           reportKey="dev-preview"
         />
 
@@ -80,6 +83,8 @@ export default function DevVandaagPage() {
             })}
           </ul>
         </section>
+
+        <Inbox items={inbox} skills={skills} />
 
         <section className="mt-6" aria-label="Snel loggen">
           <QuickLog skills={skills} streakDays={streak} />

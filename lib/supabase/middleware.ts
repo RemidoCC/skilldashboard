@@ -49,10 +49,24 @@ export async function updateSession(request: NextRequest) {
   // session gate must let them through to be judged on that.
   if (pathname.startsWith('/api/cron/')) return response;
 
-  // The API answers with a status, never a redirect. fetch follows redirects
-  // transparently, so a 307 to /login would come back as a 200 page and the
-  // offline queue would take it for a successful write and drop the entry.
-  if (!user && pathname.startsWith('/api/')) {
+  // Exactly the two OAuth routes the browser navigates to. A signed-out visit
+  // should land on the login screen rather than show raw JSON, and both do
+  // their own session check.
+  //
+  // Matched exactly, not by prefix: /disconnect sits under the same path but is
+  // called with fetch, and fetch follows redirects — so a 307 there would come
+  // back as a 200 login page and read as a successful disconnect.
+  const OAUTH_NAVIGATIONS = [
+    '/api/integrations/google',
+    '/api/integrations/google/callback',
+  ];
+  const isOauthNavigation = OAUTH_NAVIGATIONS.includes(pathname);
+
+  // Everything else under /api answers with a status, never a redirect. fetch
+  // follows redirects transparently, so a 307 to /login would come back as a
+  // 200 page and the offline queue would take it for a successful write and
+  // drop the entry.
+  if (!user && pathname.startsWith('/api/') && !isOauthNavigation) {
     return NextResponse.json(
       { ok: false, error: 'Je sessie is verlopen. Log opnieuw in.', retryable: false },
       { status: 401 },

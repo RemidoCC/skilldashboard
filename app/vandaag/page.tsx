@@ -14,6 +14,7 @@ import { Quests } from '@/components/vandaag/Quests';
 import { Goals } from '@/components/vandaag/Goals';
 import { WeekReport } from '@/components/vandaag/WeekReport';
 import { FreezeNote } from '@/components/vandaag/FreezeNote';
+import { Inbox } from '@/components/vandaag/Inbox';
 
 /** Reads live state on every visit; nothing here is worth caching. */
 export const dynamic = 'force-dynamic';
@@ -99,6 +100,9 @@ export default async function VandaagPage() {
             </ul>
           )}
         </section>
+
+        {/* Absent entirely when Google is not connected. */}
+        <Inbox items={data.inbox} skills={data.skills} />
 
         {/* --------------------------------------------------- snel loggen -- */}
         <section className="mt-6" aria-label="Snel loggen">

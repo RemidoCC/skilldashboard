@@ -170,6 +170,12 @@ export function describeMutation(mutation: Mutation): string {
       return 'Weekinstelling';
     case 'quest.accept':
       return 'Opdrachten voor volgende week';
+    case 'inbox.resolve':
+      return mutation.accept ? 'Voorstel meegeteld' : 'Voorstel weggezet';
+    case 'rule.create':
+      return `Nieuwe koppelregel "${mutation.rule.pattern}"`;
+    case 'rule.delete':
+      return 'Verwijderde koppelregel';
   }
 }
 

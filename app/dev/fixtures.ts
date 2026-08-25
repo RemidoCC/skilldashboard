@@ -1,5 +1,5 @@
 import { groupByDay, levelTrajectory, WINDOW_DAYS } from '@/lib/domain/trajectory';
-import { addDays } from '@/lib/domain/dates';
+import { addDays, dayKey, weekStart } from '@/lib/domain/dates';
 import type { LogEntry, Skill, Task } from '@/lib/domain/types';
 import type { Goal } from '@/lib/offline/mutations';
 
@@ -8,7 +8,15 @@ import type { Goal } from '@/lib/offline/mutations';
  * easy to get wrong: a two-digit display, a skill mid-level, a skill sitting on
  * an earned floor, and one that has started rusting.
  */
-export const TODAY = '2026-08-24';
+/**
+ * Anchored to the real clock, not to a fixed date.
+ *
+ * A pinned date quietly rots: everything derived from it keeps working until
+ * midnight, when "today" moves on and the preview starts describing
+ * yesterday — which is exactly how a queued completion stopped counting
+ * towards the day's total in the offline check.
+ */
+export const TODAY = dayKey(new Date());
 
 function at(daysAgo: number): string {
   const [y, m, d] = TODAY.split('-').map(Number);
@@ -232,16 +240,20 @@ export const openGoals = goals
   .filter((g) => !g.done)
   .map((g) => ({ id: g.id, skillId: g.skillId, title: g.title, progress: g.progress }));
 
+export const nextWeekStart = addDays(weekStart(TODAY), 7);
+
 export const questCandidates = [
-  { skillId: skills[3].id, title: '3 keer Gezondheid', target: 3, bonusXp: 60, weekStart: '2026-08-31' },
-  { skillId: skills[1].id, title: '4 keer Remido', target: 4, bonusXp: 80, weekStart: '2026-08-31' },
-  { skillId: skills[2].id, title: '2 keer Gezin', target: 2, bonusXp: 40, weekStart: '2026-08-31' },
-  { skillId: skills[0].id, title: '5 keer Werk', target: 5, bonusXp: 100, weekStart: '2026-08-31' },
+  { skillId: skills[3].id, title: '3 keer Gezondheid', target: 3, bonusXp: 60, weekStart: nextWeekStart },
+  { skillId: skills[1].id, title: '4 keer Remido', target: 4, bonusXp: 80, weekStart: nextWeekStart },
+  { skillId: skills[2].id, title: '2 keer Gezin', target: 2, bonusXp: 40, weekStart: nextWeekStart },
+  { skillId: skills[0].id, title: '5 keer Werk', target: 5, bonusXp: 100, weekStart: nextWeekStart },
 ];
 
+const REPORT_WEEK = weekStart(TODAY);
+
 export const weekReport = {
-  weekStart: '2026-08-24',
-  weekEnd: '2026-08-30',
+  weekStart: REPORT_WEEK,
+  weekEnd: addDays(REPORT_WEEK, 6),
   skills: [
     { skillId: skills[0].id, name: 'Werk', color: skills[0].color, xp: 420, previousXp: 300, levelsGained: 1 },
     { skillId: skills[1].id, name: 'Remido', color: skills[1].color, xp: 264, previousXp: 330, levelsGained: 0 },
@@ -265,5 +277,32 @@ export const weekReport = {
   proposedQuests: questCandidates.slice(0, 3),
 };
 
-export const frozenDays = ['2026-08-21'];
+export const frozenDays = [addDays(TODAY, -3)];
 export const heldFreezes = 2;
+
+/* --------------------------------------------------------------- fase 5 -- */
+
+export const mappingRules = [
+  { id: 'mr1', source: 'calendar' as const, pattern: 'standup', skillId: skills[0].id, xp: 20 },
+  { id: 'mr2', source: 'calendar' as const, pattern: 'klant', skillId: skills[1].id, xp: 25 },
+  { id: 'mr3', source: 'mail' as const, pattern: 'offerte', skillId: skills[1].id, xp: 15 },
+];
+
+export const inbox = [
+  {
+    id: 'ib1',
+    source: 'calendar' as const,
+    title: 'Standup · 30 min',
+    skillId: skills[0].id,
+    xp: 60,
+    occurredAt: `${TODAY}T09:30:00.000Z`,
+  },
+  {
+    id: 'ib2',
+    source: 'mail' as const,
+    title: '4 verstuurde mails · offerte',
+    skillId: skills[1].id,
+    xp: 15,
+    occurredAt: `${TODAY}T16:10:00.000Z`,
+  },
+];

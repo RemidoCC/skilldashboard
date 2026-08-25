@@ -31,6 +31,7 @@ const base: BeheerState = {
   skills: [skill(SKILL_A, 'Werk'), skill(SKILL_B, 'Podium', false)],
   tasks: [task(TASK_A, SKILL_A)],
   goals: [],
+  rules: [],
   capacity: 'normaal',
 };
 
@@ -182,5 +183,58 @@ describe('applyMutations', () => {
     expect(next.tasks.find((t) => t.id === NEW_ID)?.title).toBe('Repeteren');
     expect(next.tasks.find((t) => t.id === TASK_A)?.archived).toBe(true);
     expect(next.capacity).toBe('rustig');
+  });
+});
+
+describe('mapping rules in the fold', () => {
+  const RULE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+
+  it('adds a created rule', () => {
+    const next = applyMutations(base, [
+      queued({
+        kind: 'rule.create',
+        id: RULE,
+        rule: { source: 'calendar', pattern: 'standup', skillId: SKILL_A, xp: 20 },
+      }),
+    ]);
+    expect(next.rules).toHaveLength(1);
+    expect(next.rules[0]).toMatchObject({ id: RULE, pattern: 'standup', source: 'calendar' });
+  });
+
+  it('does not duplicate a create that is replayed', () => {
+    const create = queued({
+      kind: 'rule.create',
+      id: RULE,
+      rule: { source: 'mail', pattern: 'offerte', skillId: SKILL_A, xp: 15 },
+    });
+    expect(applyMutations(base, [create, create]).rules).toHaveLength(1);
+  });
+
+  it('removes a deleted rule', () => {
+    const created = applyMutations(base, [
+      queued({
+        kind: 'rule.create',
+        id: RULE,
+        rule: { source: 'calendar', pattern: 'x', skillId: SKILL_A, xp: 20 },
+      }),
+    ]);
+    expect(applyMutations(created, [queued({ kind: 'rule.delete', id: RULE })]).rules).toEqual([]);
+  });
+
+  it('keeps the order rules were made in, because the first match wins', () => {
+    const next = applyMutations(base, [
+      queued({ kind: 'rule.create', id: RULE, rule: { source: 'calendar', pattern: 'klant acme', skillId: SKILL_A, xp: 20 } }),
+      queued({ kind: 'rule.create', id: NEW_ID, rule: { source: 'calendar', pattern: 'klant', skillId: SKILL_B, xp: 20 } }),
+    ]);
+    expect(next.rules.map((r) => r.pattern)).toEqual(['klant acme', 'klant']);
+  });
+
+  it('leaves inbox and quest mutations to the server', () => {
+    // Neither belongs to the Beheer state, so the fold must not invent one.
+    const next = applyMutations(base, [
+      queued({ kind: 'inbox.resolve', id: RULE, accept: true }),
+      queued({ kind: 'quest.accept', weekStart: '2026-08-31', quests: [] }),
+    ]);
+    expect(next).toEqual(base);
   });
 });

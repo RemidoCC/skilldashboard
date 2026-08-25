@@ -17,7 +17,17 @@ export type Mutation =
   | { kind: 'goal.update'; id: string; patch: GoalPatch }
   | { kind: 'goal.delete'; id: string }
   | { kind: 'week.capacity'; weekStart: string; capacity: Capacity }
-  | { kind: 'quest.accept'; weekStart: string; quests: AcceptedQuest[] };
+  | { kind: 'quest.accept'; weekStart: string; quests: AcceptedQuest[] }
+  | { kind: 'inbox.resolve'; id: string; accept: boolean }
+  | { kind: 'rule.create'; id: string; rule: NewMappingRule }
+  | { kind: 'rule.delete'; id: string };
+
+export interface NewMappingRule {
+  source: 'calendar' | 'mail';
+  pattern: string;
+  skillId: string;
+  xp: number;
+}
 
 export interface AcceptedQuest {
   skillId: string;
@@ -91,10 +101,15 @@ export interface PendingMutation {
   attempts: number;
 }
 
+export interface MappingRuleRow extends NewMappingRule {
+  id: string;
+}
+
 export interface BeheerState {
   skills: Skill[];
   tasks: Task[];
   goals: Goal[];
+  rules: MappingRuleRow[];
   capacity: Capacity;
 }
 
@@ -113,6 +128,7 @@ export function applyMutations(
   let skills = [...state.skills];
   let tasks = [...state.tasks];
   let goals = [...state.goals];
+  let rules = [...state.rules];
   let capacity = state.capacity;
 
   for (const { mutation } of mutations) {
@@ -227,13 +243,23 @@ export function applyMutations(
         capacity = mutation.capacity;
         break;
       }
-      case 'quest.accept': {
-        // Quests are not part of the Beheer state this fold describes; the
-        // Vandaag screen reads them from the server after the queue drains.
+      case 'quest.accept':
+      case 'inbox.resolve': {
+        // Neither is part of the Beheer state this fold describes; both are
+        // read from the server after the queue drains.
+        break;
+      }
+      case 'rule.create': {
+        if (rules.some((r) => r.id === mutation.id)) break;
+        rules = [...rules, { id: mutation.id, ...mutation.rule }];
+        break;
+      }
+      case 'rule.delete': {
+        rules = rules.filter((r) => r.id !== mutation.id);
         break;
       }
     }
   }
 
-  return { skills, tasks, goals, capacity };
+  return { skills, tasks, goals, rules, capacity };
 }

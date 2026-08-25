@@ -26,9 +26,12 @@ export default async function BeheerPage() {
               skills: data.skills,
               tasks: data.tasks,
               goals: data.goals,
+              rules: data.rules,
               capacity: data.capacity,
             }}
             weekStart={data.weekStart}
+            googleConfigured={data.googleConfigured}
+            googleConnected={data.googleConnected}
           />
         </div>
       </main>

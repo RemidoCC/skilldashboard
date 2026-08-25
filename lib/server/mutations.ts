@@ -302,6 +302,84 @@ export async function applyMutation(mutation: Mutation): Promise<MutationOutcome
       return error ? wobble(`Opdrachten opslaan mislukte: ${error.message}`) : { ok: true };
     }
 
+    case 'inbox.resolve': {
+      if (!isUuid(mutation.id)) return bad('Ongeldig voorstel.');
+
+      const { data: item, error: readError } = await supabase
+        .from('inbox_items')
+        .select('*')
+        .eq('id', mutation.id)
+        .maybeSingle();
+
+      if (readError) return wobble(`Voorstel laden mislukte: ${readError.message}`);
+      if (!item) return bad('Dit voorstel bestaat niet meer.');
+      // Already dealt with, possibly by a replay of this very mutation.
+      if (item.status !== 'pending') return { ok: true };
+
+      if (!mutation.accept) {
+        const { error } = await supabase
+          .from('inbox_items')
+          .update({ status: 'dismissed' })
+          .eq('id', mutation.id);
+        return error ? wobble(`Wegzetten mislukte: ${error.message}`) : { ok: true };
+      }
+
+      if (!item.suggested_skill_id) return bad('Dit voorstel heeft geen vaardigheid.');
+
+      // The item's own id becomes the ledger entry id, so accepting the same
+      // suggestion twice writes one entry and awards the XP once.
+      const { error: logError } = await supabase.rpc('log_completion', {
+        p_id: item.id,
+        p_skill: item.suggested_skill_id,
+        p_task: null,
+        p_title: item.title,
+        p_xp: item.suggested_xp,
+        p_minutes: null,
+        p_note: null,
+        p_source: item.source === 'mail' ? 'mail' : 'calendar',
+        p_created_at: item.occurred_at,
+      });
+      if (logError) return wobble(`Meetellen mislukte: ${logError.message}`);
+
+      const { error } = await supabase
+        .from('inbox_items')
+        .update({ status: 'accepted' })
+        .eq('id', mutation.id);
+      return error ? wobble(`Bijwerken mislukte: ${error.message}`) : { ok: true };
+    }
+
+    case 'rule.create': {
+      if (!isUuid(mutation.id) || !isUuid(mutation.rule.skillId)) {
+        return bad('Ongeldige verwijzing.');
+      }
+      if (mutation.rule.source !== 'calendar' && mutation.rule.source !== 'mail') {
+        return bad('Onbekende bron.');
+      }
+      const pattern = title(mutation.rule.pattern, 'Zoektekst');
+      if (isFailure(pattern)) return pattern;
+      const points = value(mutation.rule.xp);
+      if (isFailure(points)) return points;
+
+      const { error } = await supabase.from('mapping_rules').upsert(
+        {
+          id: mutation.id,
+          user_id: user.id,
+          source: mutation.rule.source,
+          pattern,
+          skill_id: mutation.rule.skillId,
+          xp: points,
+        },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
+      return error ? wobble(`Koppelregel opslaan mislukte: ${error.message}`) : { ok: true };
+    }
+
+    case 'rule.delete': {
+      if (!isUuid(mutation.id)) return bad('Ongeldige koppelregel.');
+      const { error } = await supabase.from('mapping_rules').delete().eq('id', mutation.id);
+      return error ? wobble(`Koppelregel verwijderen mislukte: ${error.message}`) : { ok: true };
+    }
+
     default:
       return bad('Onbekende wijziging.');
   }

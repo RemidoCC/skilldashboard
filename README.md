@@ -49,6 +49,7 @@ app/                    routes; /vandaag is the home screen
   api/mutations/        edits from Beheer
   api/export/           the whole account as JSON
   api/cron/             the scheduled jobs, behind a bearer token
+  api/integrations/     the Google OAuth flow
   dev/                  visual preview against fixtures, 404s in production
 components/instrument/  the dot matrix, the meters, the display, the self-test
 components/vandaag/     task rows, timer, quick log
@@ -58,7 +59,7 @@ components/offline/     the queue provider, sync bar, install prompt
 lib/domain/             the rules — pure, dependency-free, fully tested
 lib/offline/            the IndexedDB queue and the optimistic fold
 lib/data/               row mapping and the Vandaag loader
-lib/server/             the write path and the scheduled jobs
+lib/server/             the write path, the scheduled jobs, the Google client
 vercel.json             the cron schedules
 public/sw.js            the service worker
 supabase/migrations/    schema, RLS, and the level functions
@@ -178,11 +179,63 @@ thrown out, and nothing reaches the database until it is confirmed.
 | --- | --- | --- |
 | `/api/cron/daily` | 02:00 daily | rust, freeze grant, freeze spend |
 | `/api/cron/weekly` | 02:00 Monday | season rollover, then the week's quests |
+| `/api/cron/sync` | 07:00 and 19:00 | pull Google, file suggestions |
 
-Both need `CRON_SECRET` (Vercel sends it as a bearer token) and
+All three need `CRON_SECRET` (Vercel sends it as a bearer token) and
 `SUPABASE_SERVICE_ROLE_KEY` — a cron run has no session, so it cannot go
 through RLS the way a request does. Without either, the route refuses and says
-which one is missing.
+which one is missing. The sync job additionally needs `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`; without them it reports that Google is not configured
+and does nothing.
+
+Note the split under `/api`: the two OAuth routes the **browser navigates to**
+redirect to the login screen when signed out, while every endpoint called with
+`fetch` answers with a status. Mixing those up is how a write gets lost —
+`fetch` follows redirects, so a 307 comes back as a 200 login page and reads as
+success.
+
+## Integrations
+
+Google, read-only: `calendar.readonly` and `gmail.readonly`, nothing else. Twice
+a day a job pulls yesterday's and today's **finished** calendar events and sent
+mail, matches them against your mapping rules, and files what it finds as
+suggestions.
+
+**Nothing is ever awarded automatically.** Every item lands in the inbox as
+`pending` and waits for a tap, which is what keeps a wrong mapping rule from
+being able to do anything worse than waste a moment. Accepting reuses the
+inbox item's own id as the ledger entry id, so a suggestion accepted twice
+writes one entry.
+
+Rules are plain case-insensitive substrings, not patterns — a rule you can read
+out loud is a rule you can predict — and the **first** match wins, so a
+specific rule above a general one takes precedence. A calendar event is priced
+at the skill's own timer rate (the median of its timer tasks), so an hour in
+the diary is worth what an hour on the timer would have been. Sent mail is
+counted per rule per day and offered as one batch; a message at a time would
+bury the inbox under a working morning.
+
+If Google is not connected the inbox is not rendered at all, and everything
+else works exactly as before.
+
+### The refresh token
+
+The token is a long-lived credential for a calendar and a mailbox, so the rule
+that it never reaches the client is enforced in the database rather than in the
+data layer — one careless `select *` should not be able to leak it.
+
+`integration_accounts` has RLS with a row policy, the table-level `SELECT`
+revoked, and only the four harmless columns granted back. Beheer can therefore
+ask "is something linked" and get an answer, while selecting the token raises
+`permission denied`. The service role, which the sync job runs as, is
+unaffected.
+
+This is easy to get wrong, and the first attempt here was: `grant select on
+<table>` covers every column present and future, so a column-level
+`revoke select (refresh_token)` subtracts **nothing** and the token stays
+readable. Only revoking the table grant and then granting the safe columns
+holds. `tests/integration-security.test.ts` pins it against a real Postgres,
+including that `select *` fails.
 
 ## Offline
 
@@ -270,7 +323,8 @@ none of this can drift.
       queues offline like a completion.
 - [x] **Phase 4 — Rhythm.** Quests, rust, freezes, the Sunday report, seasons,
       goal proposals and the two cron jobs.
-- [ ] Phase 5 — Google Calendar and Gmail
+- [x] **Phase 5 — Integrations.** Google OAuth, the twice-daily sync, the
+      inbox, and mapping rules. Waiting only on credentials.
 
 Rust and freeze storage were open after phase 1 and are now settled — see
 [The rules](#the-rules). The mechanics themselves (the decay job, the weekly
@@ -285,7 +339,13 @@ best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 against what Chromium actually requires. Both offline suites pass (13 checks on
 Vandaag, 10 on Beheer), and the cron routes refuse an unsigned call.
 
-Three things are **not** verified end to end. Signing in needs a magic link sent
+**Phase 5 is code-complete but unconnected**: `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` are not set, so no real consent screen, token exchange
+or API call has run. Everything downstream of the fetch — matching, pricing,
+deduplication, the inbox, accepting and dismissing — is covered by tests and
+the previews.
+
+Three further things are **not** verified end to end. Signing in needs a magic link sent
 to a real mailbox, so the authenticated round trip — queue drains, server awards
 XP, page refreshes — is covered at the unit level (idempotency against real
 Postgres, worker/page request-body parity) rather than through the UI. The

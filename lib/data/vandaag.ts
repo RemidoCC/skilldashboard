@@ -36,6 +36,15 @@ export interface GoalRow {
   progress: number;
 }
 
+export interface InboxRow {
+  id: string;
+  source: 'calendar' | 'mail';
+  title: string;
+  skillId: string | null;
+  xp: number;
+  occurredAt: string;
+}
+
 export interface VandaagData {
   today: string;
   capacity: Capacity;
@@ -61,6 +70,8 @@ export interface VandaagData {
   /** Present only inside the window the report is on offer. */
   report: WeekReport | null;
   reportKey: string;
+  /** Empty when Google is not connected, so the inbox simply does not appear. */
+  inbox: InboxRow[];
 }
 
 /** Every query below is scoped by RLS to the signed-in user, so no id is passed. */
@@ -72,8 +83,17 @@ export async function loadVandaag(): Promise<VandaagData> {
   const week = weekStart(today);
   const nextWeek = addDays(week, 7);
 
-  const [skillsRes, tasksRes, entriesRes, weekRes, seasonRes, questsRes, goalsRes, freezeRes] =
-    await Promise.all([
+  const [
+    skillsRes,
+    tasksRes,
+    entriesRes,
+    weekRes,
+    seasonRes,
+    questsRes,
+    goalsRes,
+    freezeRes,
+    inboxRes,
+  ] = await Promise.all([
       supabase.from('skills').select('*').order('sort_order'),
       supabase.from('tasks').select('*').eq('archived', false).order('created_at'),
       supabase
@@ -91,6 +111,11 @@ export async function loadVandaag(): Promise<VandaagData> {
       supabase.from('quests').select('*').eq('week_start', week),
       supabase.from('goals').select('*').eq('done', false),
       supabase.from('streak_freezes').select('*'),
+      supabase
+        .from('inbox_items')
+        .select('*')
+        .eq('status', 'pending')
+        .order('occurred_at', { ascending: false }),
     ]);
 
   const failure = skillsRes.error ?? tasksRes.error ?? entriesRes.error;
@@ -194,7 +219,17 @@ export async function loadVandaag(): Promise<VandaagData> {
     });
   }
 
+  const inbox: InboxRow[] = (inboxRes.data ?? []).map((row) => ({
+    id: row.id,
+    source: row.source === 'mail' ? 'mail' : 'calendar',
+    title: row.title,
+    skillId: row.suggested_skill_id,
+    xp: row.suggested_xp,
+    occurredAt: row.occurred_at,
+  }));
+
   return {
+    inbox,
     quests,
     goals,
     report,

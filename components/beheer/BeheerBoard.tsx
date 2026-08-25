@@ -6,6 +6,7 @@ import { applyMutations, type BeheerState } from '@/lib/offline/mutations';
 import { TaskManager } from './TaskManager';
 import { SkillManager } from './SkillManager';
 import { GoalManager } from './GoalManager';
+import { MappingRules } from './MappingRules';
 import { Settings } from './Settings';
 
 /**
@@ -15,7 +16,17 @@ import { Settings } from './Settings';
  * task on a train shows up straight away and reaches the database when the
  * signal comes back.
  */
-export function BeheerBoard({ server, weekStart }: { server: BeheerState; weekStart: string }) {
+export function BeheerBoard({
+  server,
+  weekStart,
+  googleConfigured,
+  googleConnected,
+}: {
+  server: BeheerState;
+  weekStart: string;
+  googleConfigured: boolean;
+  googleConnected: boolean;
+}) {
   const { mutations } = useOffline();
   const state = useMemo(() => applyMutations(server, mutations), [server, mutations]);
 
@@ -30,15 +41,12 @@ export function BeheerBoard({ server, weekStart }: { server: BeheerState; weekSt
         weekStart={weekStart}
       />
 
-      <section aria-labelledby="koppelingen">
-        <h2 id="koppelingen" className="label">
-          Koppelingen
-        </h2>
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-          Agenda en mail worden in fase 5 aangesloten. Daarna staan hier de regels die bepalen welk
-          item bij welke vaardigheid hoort.
-        </p>
-      </section>
+      <MappingRules
+        rules={state.rules}
+        skills={state.skills}
+        connected={googleConnected}
+        configured={googleConfigured}
+      />
 
       <Settings capacity={state.capacity} weekStart={weekStart} />
     </div>

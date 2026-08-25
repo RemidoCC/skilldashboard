@@ -3,15 +3,20 @@ import 'server-only';
 import { createClient } from '@/lib/supabase/server';
 import { toCapacity, toSkill, toTask } from './map';
 import { dayKey, weekStart } from '@/lib/domain/dates';
+import { isGoogleConfigured } from '@/lib/server/google';
 import type { Capacity, Skill, Task } from '@/lib/domain/types';
-import type { Goal } from '@/lib/offline/mutations';
+import type { Goal, MappingRuleRow } from '@/lib/offline/mutations';
 
 export interface BeheerData {
   skills: Skill[];
   tasks: Task[];
   goals: Goal[];
+  rules: MappingRuleRow[];
   capacity: Capacity;
   weekStart: string;
+  /** Whether the OAuth credentials exist at all, and whether an account is linked. */
+  googleConfigured: boolean;
+  googleConnected: boolean;
 }
 
 /** RLS scopes every query to the signed-in user, so no id is passed. */
@@ -19,11 +24,15 @@ export async function loadBeheer(): Promise<BeheerData> {
   const supabase = await createClient();
   const week = weekStart(dayKey(new Date()));
 
-  const [skillsRes, tasksRes, goalsRes, weekRes] = await Promise.all([
+  const [skillsRes, tasksRes, goalsRes, weekRes, rulesRes, accountRes] = await Promise.all([
     supabase.from('skills').select('*').order('sort_order'),
     supabase.from('tasks').select('*').order('created_at'),
     supabase.from('goals').select('*').order('created_at'),
     supabase.from('week_settings').select('*').eq('week_start', week).maybeSingle(),
+    supabase.from('mapping_rules').select('*'),
+    // The refresh token is unreadable under RLS, so this only ever answers
+    // "is something linked" — which is all the screen needs to know.
+    supabase.from('integration_accounts').select('provider').eq('provider', 'google').maybeSingle(),
   ]);
 
   const failure = skillsRes.error ?? tasksRes.error ?? goalsRes.error;
@@ -42,8 +51,19 @@ export async function loadBeheer(): Promise<BeheerData> {
         done: row.done,
       }),
     ),
+    rules: (rulesRes.data ?? []).map(
+      (row): MappingRuleRow => ({
+        id: row.id,
+        source: row.source === 'mail' ? 'mail' : 'calendar',
+        pattern: row.pattern,
+        skillId: row.skill_id,
+        xp: row.xp,
+      }),
+    ),
     capacity: toCapacity(weekRes.data?.capacity),
     weekStart: week,
+    googleConfigured: isGoogleConfigured(),
+    googleConnected: Boolean(accountRes.data),
   };
 }
 

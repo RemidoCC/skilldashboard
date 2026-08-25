@@ -3,7 +3,7 @@ import { Header } from '@/components/shell/Header';
 import { BottomNav } from '@/components/shell/BottomNav';
 import { SyncBar } from '@/components/offline/SyncBar';
 import { BeheerBoard } from '@/components/beheer/BeheerBoard';
-import { allTasks, goals, skills, TODAY } from '../fixtures';
+import { allTasks, goals, mappingRules, skills, TODAY } from '../fixtures';
 
 /** Visual preview of Beheer. Never reachable in a deployed build. */
 export default function DevBeheerPage() {
@@ -16,8 +16,10 @@ export default function DevBeheerPage() {
         <SyncBar />
         <div className="mt-5">
           <BeheerBoard
-            server={{ skills, tasks: allTasks, goals, capacity: 'normaal' }}
+            server={{ skills, tasks: allTasks, goals, rules: mappingRules, capacity: 'normaal' }}
             weekStart={TODAY}
+            googleConfigured
+            googleConnected
           />
         </div>
       </main>
