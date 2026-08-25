@@ -193,6 +193,46 @@ for (const [label, expected] of [['30 dagen', '?dagen=30'], ['Alles', '?dagen=al
 }
 pass('every period is a plain link, so it survives a reload and a bookmark');
 
+/**
+ * "27 jul 2026" as a day number.
+ *
+ * Date.parse only knows the English abbreviations, and half the Dutch ones —
+ * mei, mrt, okt — are not among them. Relying on it would let this check pass
+ * on a NaN, which is worse than not having it.
+ */
+const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+function dutchDay(text) {
+  const [day, month, year] = text.trim().split(' ');
+  const index = MONTHS.indexOf(month.replace('.', ''));
+  if (index < 0) throw new Error(`onbekende maand in "${text}"`);
+  return Date.UTC(Number(year), index, Number(day)) / 86400000;
+}
+
+// Each window draws the days it says, and the picker marks the one you are on.
+for (const [range, days] of [['30', 30], ['90', 90], ['365', 365]]) {
+  await page.goto(`${BASE}/dev/historie?dagen=${range}`, { waitUntil: 'networkidle' });
+  const span = await said(page.locator('section[aria-labelledby="verloop"] > div > span'));
+  const [from, to] = span.split(' tot ').map(dutchDay);
+  const drawn = to - from + 1;
+  const marked = await said(page.locator('[aria-current="page"]'));
+
+  if (!marked.startsWith(range === '365' ? 'een jaar' : range)) {
+    fail(`?dagen=${range} marks "${marked}" as current`);
+  } else if (drawn !== days) {
+    fail(`?dagen=${range} draws ${drawn} days, not ${days}`);
+  } else pass(`?dagen=${range} draws ${days} days and marks itself`);
+}
+
+await page.goto(`${BASE}/dev/historie?dagen=alles`, { waitUntil: 'networkidle' });
+if (!(await said(page.locator('[aria-current="page"]'))).startsWith('alles')) {
+  fail('?dagen=alles does not mark itself');
+} else pass('?dagen=alles reaches back to the first thing logged');
+
+await page.goto(`${BASE}/dev/historie?dagen=zeventien`, { waitUntil: 'networkidle' });
+if (!(await said(page.locator('[aria-current="page"]'))).startsWith('90')) {
+  fail('an unknown period is not treated as the default');
+} else pass('an unknown period falls back to ninety days rather than erroring');
+
 const seizoenen = page.locator('section[aria-labelledby="seizoenen"]');
 const text = await said(seizoenen.locator('li', { hasText: 'S02' }).first());
 

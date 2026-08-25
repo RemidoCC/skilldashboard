@@ -1,4 +1,11 @@
-import { DEFAULT_RANGE, groupByDay, levelTrajectory, WINDOW_DAYS } from '@/lib/domain/trajectory';
+import {
+  DEFAULT_RANGE,
+  groupByDay,
+  levelTrajectory,
+  windowStart,
+  WINDOW_DAYS,
+  type HistoryRange,
+} from '@/lib/domain/trajectory';
 import { addDays, dayKey, weekStart } from '@/lib/domain/dates';
 import type { LogEntry, Skill, Task } from '@/lib/domain/types';
 import type { Goal } from '@/lib/offline/mutations';
@@ -196,6 +203,20 @@ function ledger(): LogEntry[] {
 }
 
 const entries = ledger();
+
+/** The window the preview draws, so the picker can be reviewed in every state. */
+export function historieFor(range: HistoryRange = DEFAULT_RANGE) {
+  const earliest = entries.length > 0 ? dayKey(entries[0].createdAt) : null;
+  const from = windowStart(range, TODAY, earliest);
+  return {
+    ...historie,
+    range,
+    from,
+    trajectories: levelTrajectory(skills, entries, from, TODAY),
+    days: groupByDay(entries.filter((e) => dayKey(e.createdAt) >= from)).slice(0, 4),
+  };
+}
+
 const from = addDays(TODAY, -(WINDOW_DAYS - 1));
 
 export const historie = {

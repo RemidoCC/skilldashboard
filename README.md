@@ -422,7 +422,7 @@ On the production build, throttled mobile: performance 95–100 across runs, acc
 best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 — Lighthouse dropped its PWA category in v12, so those are checked directly
 against what Chromium actually requires. All four browser suites pass (13 checks on
-Vandaag, 10 on Beheer, 9 on the additions, 24 on the hardening), and the cron
+Vandaag, 10 on Beheer, 9 on the additions, 29 on the hardening), and the cron
 routes refuse an unsigned call.
 
 **Phase 5 is code-complete but unconnected**: `GOOGLE_CLIENT_ID` and

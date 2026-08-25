@@ -61,8 +61,7 @@ naar een echt postvak), dus werk met de previews:
 Ze renderen dezelfde componenten als de echte schermen tegen vaste fixtures.
 `/dev/beheer` neemt `?google=<status>`, `?sleutel=nee`, `?sleutels=nee` en
 `?gekoppeld=nee` aan om koppelstatussen te forceren. `/dev/historie` volgt
-`?dagen=30|90|365|alles` niet — daarvoor moet je naar `/historie` met sessie,
-dus beoordeel daar de opmaak van de keuzebalk en niet de inhoud.
+`?dagen=30|90|365|alles`, net als het echte scherm.
 
 Bekijk alles op **390 × 844** (de maat waarvoor het gemaakt is), en daarnaast op
 320 breed en op een tablet. Maak screenshots; `npm run screenshots` doet een
