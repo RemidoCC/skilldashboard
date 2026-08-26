@@ -29,8 +29,10 @@ export function SkillManager({ skills }: { skills: Skill[] }) {
 
       {active.length > DILUTION_LIMIT ? (
         <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }}>
-          {active.length} vaardigheden staan aan. Dezelfde inspanning wordt over meer meters
-          verdeeld, dus elke meter beweegt minder. Zes is de bovengrens die scherp blijft.
+          {active.length} vaardigheden staan aan, {active.length - DILUTION_LIMIT} boven de{' '}
+          {DILUTION_LIMIT} waar de meters op ontworpen zijn. Dezelfde inspanning verdeelt zich
+          over {active.length} meters in plaats van {DILUTION_LIMIT}, dus elke meter beweegt{' '}
+          {Math.round((1 - DILUTION_LIMIT / active.length) * 100)} procent minder.
         </p>
       ) : null}
 
@@ -75,7 +77,7 @@ export function SkillManager({ skills }: { skills: Skill[] }) {
               <button
                 type="button"
                 onClick={() => setEditing(skill.id)}
-                className="label mt-1.5 underline underline-offset-2"
+                className="label-button label mt-1.5 underline underline-offset-2"
               >
                 Bewerken
               </button>

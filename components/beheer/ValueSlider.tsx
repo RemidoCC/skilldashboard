@@ -52,8 +52,10 @@ export function ValueSlider({
         className="mt-1 text-[12px]"
         style={{ color: heavy ? 'var(--signal-text)' : 'var(--muted)' }}
       >
+        {/* States the ratio and stops. "Houd dit zeldzaam" was advice, and the
+            slider is a measuring control, not a coach. */}
         {heavy
-          ? 'Zwaar. Houd dit zeldzaam, anders verdwijnt de rest in het niet.'
+          ? `${value} XP is ${Math.round(value / MIN_VALUE)} keer de laagste waarde van ${MIN_VALUE} XP.`
           : (hint ?? 'Stappen van 5.')}
       </p>
     </div>

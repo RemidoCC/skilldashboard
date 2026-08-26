@@ -65,25 +65,39 @@ export interface SeasonTally {
   recovered: boolean;
 }
 
+/** Above this share of the season's XP, one skill dominated it. */
+export const SEASON_DOMINANT_SHARE = 0.55;
+/** Below this highest share, the season was spread. */
+export const SEASON_BALANCED_SHARE = 0.4;
+
 /**
  * What the season was, in one word.
  *
- * Deterministic and derived only from what happened, so the badge reports a
- * season rather than flattering it. The order matters: recovery is the rarest
- * and most worth naming, a lopsided season is worth naming honestly, and
- * balance is worth naming when it was actually achieved.
+ * Deterministic and derived only from what happened. The order is the whole
+ * point: recovery used to be tested first, so a season in which nine tenths of
+ * the XP went to one skill and one skill happened to climb back was reported
+ * as "hersteld". Every word of that was true and the choice was not — the
+ * badge picked the pleasantest fact available and let the figures underneath
+ * contradict it. How the season was spent is the larger fact, so it is asked
+ * first; recovery is named after it, where it is the whole story.
  */
 export function badgeTheme(tallies: readonly SeasonTally[]): BadgeTheme {
   const total = tallies.reduce((sum, t) => sum + Math.max(t.xp, 0), 0);
   if (total === 0) return 'gestaag';
 
-  if (tallies.some((t) => t.recovered)) return 'hersteld';
-
   const shares = tallies.map((t) => Math.max(t.xp, 0) / total);
   const highest = Math.max(...shares);
 
-  if (highest > 0.55) return 'toegespitst';
-  if (highest < 0.4) return 'evenwichtig';
+  // With a single skill on the account it takes all of it by definition, so
+  // "toegespitst" would be reporting the arithmetic rather than the season.
+  // Same guard balanceSignal uses, and for the same reason. Counted over every
+  // skill in play, not over the ones that gained: a skill that only rusted was
+  // still there to be worked on, and not working on it is the lean.
+  const contested = tallies.length > 1;
+
+  if (contested && highest > SEASON_DOMINANT_SHARE) return 'toegespitst';
+  if (tallies.some((t) => t.recovered)) return 'hersteld';
+  if (contested && highest < SEASON_BALANCED_SHARE) return 'evenwichtig';
   return 'gestaag';
 }
 

@@ -92,7 +92,7 @@ export function GoalProposalFlow({
 
   return (
     <div className="recess mt-3 p-3">
-      <span className="label">Voorstellen bij dit doel</span>
+      <h3 className="label">Voorstellen bij dit doel</h3>
       <p className="mt-1 text-[12px]" style={{ color: 'var(--muted)' }}>
         Niets wordt aangemaakt tot je het bevestigt. Pas aan wat niet klopt, gooi weg wat je niet
         wilt.
@@ -154,16 +154,16 @@ export function GoalProposalFlow({
                   <button
                     type="button"
                     onClick={() => update(draft.key, { editing: true, rejected: false })}
-                    className="label underline underline-offset-2"
+                    className="label-button label underline underline-offset-2"
                   >
                     Aanpassen
                   </button>
                   <button
                     type="button"
                     onClick={() => update(draft.key, { rejected: !draft.rejected })}
-                    className="label underline underline-offset-2"
+                    className="label-button label underline underline-offset-2"
                   >
-                    {draft.rejected ? 'Toch houden' : 'Weg'}
+                    {draft.rejected ? 'Toch houden' : 'Weg ermee'}
                   </button>
                 </div>
               </>
@@ -187,9 +187,9 @@ export function GoalProposalFlow({
           <button
             type="button"
             onClick={() => setQuestRejected((v) => !v)}
-            className="label mt-1.5 underline underline-offset-2"
+            className="label-button label mt-1.5 underline underline-offset-2"
           >
-            {questRejected ? 'Toch houden' : 'Weg'}
+            {questRejected ? 'Toch houden' : 'Weg ermee'}
           </button>
         </li>
       </ul>
@@ -205,9 +205,12 @@ export function GoalProposalFlow({
           className="raised h-11 px-5 text-[13px]"
           style={{ background: 'var(--signal-fill)', color: 'var(--on-signal)' }}
         >
+          {/* "Maak 3 + 1 aan" never said what the one was. */}
           {kept.length === 0 && !questRejected
-            ? 'Alleen de opdracht'
-            : `Maak ${kept.length}${questRejected ? '' : ' + 1'} aan`}
+            ? 'Maak alleen de opdracht aan'
+            : `Maak ${kept.length} ${kept.length === 1 ? 'taak' : 'taken'}${
+                questRejected ? '' : ' en 1 opdracht'
+              } aan`}
         </button>
       </div>
     </div>

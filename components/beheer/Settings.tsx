@@ -4,15 +4,10 @@ import { useEffect, useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { HAPTICS_KEY, SOUND_KEY, click, setPreference, hapticsEnabled, soundEnabled } from '@/lib/feedback';
 import { THEME_STORAGE_KEY, type ThemePreference } from '@/lib/theme';
+import { CAPACITIES } from '@/lib/domain/capacity';
 import { checkRestore, restoreCounts } from '@/lib/domain/restore';
 import { SignOut } from './SignOut';
 import type { Capacity } from '@/lib/domain/types';
-
-const CAPACITIES: { value: Capacity; label: string; hint: string }[] = [
-  { value: 'rustig', label: 'Rustig', hint: 'Lagere opdrachten, en veertien dagen voor roest.' },
-  { value: 'normaal', label: 'Normaal', hint: 'Volle opdrachten, en tien dagen voor roest.' },
-  { value: 'gek', label: 'Gek', hint: 'Kleinere opdrachten, en eenentwintig dagen voor roest.' },
-];
 
 const THEMES: { value: ThemePreference; label: string }[] = [
   { value: 'auto', label: 'Automatisch' },
@@ -35,7 +30,12 @@ function Row({
         <div className="min-w-0">
           <p className="text-[14px] leading-tight">{label}</p>
           {hint ? (
-            <span className="label mt-0.5 block">{hint}</span>
+            // A sentence, so it is set as one. .label is a two-word microlabel
+            // and renders in caps at 9px; a sentence run through it wraps to
+            // two lines of spaced capitals with a full stop on the end.
+            <span className="mt-0.5 block text-[12px]" style={{ color: 'var(--muted)' }}>
+              {hint}
+            </span>
           ) : null}
         </div>
         {children}
@@ -213,7 +213,7 @@ export function Settings({ capacity, weekStart }: { capacity: Capacity; weekStar
                 <span>
                   <span className="block text-[14px] leading-tight">{option.label}</span>
                   <span
-                    className="label mt-0.5 block"
+                    className="mt-0.5 block text-[12px]"
                     style={{ color: selected ? 'var(--panel)' : 'var(--muted)' }}
                   >
                     {option.hint}
@@ -228,7 +228,7 @@ export function Settings({ capacity, weekStart }: { capacity: Capacity; weekStar
       <SignOut />
 
       <div className="mt-4">
-        <span className="label">Export</span>
+        <h3 className="label">Export</h3>
         <p className="mt-1 text-[13px]">
           Alles wat het toestel van je bewaart, als JSON. Het logboek zit erbij, dus hieruit is elk
           niveau opnieuw te berekenen.
@@ -325,7 +325,7 @@ function Restore() {
 
   return (
     <div className="mt-4">
-      <span className="label">Terugzetten</span>
+      <h3 className="label">Terugzetten</h3>
       <p className="mt-1 text-[13px]">
         Een eerder gedownloade export weer inlezen. Wat er nu staat wordt vervangen, niet
         aangevuld. De niveaus worden daarna opnieuw uit het logboek berekend.
@@ -333,15 +333,22 @@ function Restore() {
 
       {/* The native file control paints its own English button in its own
           style. The input stays, so the keyboard and the screen reader still
-          find it; the label is what you see, and it carries the focus ring. */}
-      <input
-        id="restore-file"
-        type="file"
-        accept="application/json,.json"
-        onChange={choose}
-        className="peer sr-only"
-      />
+          find it; the label is what you see, and it carries the focus ring.
+
+          The input has to be a preceding *sibling* of that label. Tailwind
+          compiles peer-focus-visible to `:is(:where(.peer):focus-visible ~ *)`,
+          a sibling combinator: with the input one level up the rule could never
+          match, so the field took focus — it is sr-only, clipped to 1×1 — and
+          nothing at all appeared on screen. First step of the only irreversible
+          flow in the app, and the keyboard lost its place there. */}
       <div className="mt-2 flex justify-end">
+        <input
+          id="restore-file"
+          type="file"
+          accept="application/json,.json"
+          onChange={choose}
+          className="peer sr-only"
+        />
         <label
           htmlFor="restore-file"
           className="raised flex h-11 cursor-pointer items-center px-5 text-[13px] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
@@ -374,7 +381,7 @@ function Restore() {
                 <button
                   type="button"
                   onClick={() => setConfirming(false)}
-                  className="label underline underline-offset-2"
+                  className="label-button label underline underline-offset-2"
                 >
                   Laat staan
                 </button>

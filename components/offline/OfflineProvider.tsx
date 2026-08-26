@@ -17,8 +17,10 @@ import {
   pending as readPending,
   pendingMutations as readPendingMutations,
   readFailures,
+  requeueFailure,
   requestBackgroundSync,
   dismissFailure as forgetFailure,
+  type Blocked,
 } from '@/lib/offline/queue';
 import type { Mutation, PendingMutation } from '@/lib/offline/mutations';
 import { SYNC_CHANNEL, type FailedCompletion, type PendingCompletion } from '@/lib/offline/types';
@@ -32,12 +34,18 @@ interface OfflineState {
   mutations: PendingMutation[];
   online: boolean;
   syncing: boolean;
+  /** Why a queue with work left in it is standing still, as last measured. */
+  blocked: Blocked;
   /** Writes that can never succeed, surfaced once so they are not lost silently. */
   failures: FailedCompletion[];
   record: (input: RecordInput) => Promise<void>;
   /** Queues an edit and shows it immediately. */
   mutate: (mutation: Mutation) => Promise<void>;
   dismissFailure: (id: string) => void;
+  /** Sends the queue again, now. Nothing else retries on its own. */
+  retry: () => Promise<void>;
+  /** Puts one parked failure back in the queue and sends it again. */
+  retryFailure: (id: string) => Promise<void>;
 }
 
 const OfflineContext = createContext<OfflineState | null>(null);
@@ -56,6 +64,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   // the effect corrects it immediately.
   const [online, setOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [blocked, setBlocked] = useState<Blocked>(null);
   const [failures, setFailures] = useState<FailedCompletion[]>([]);
 
   const refreshPending = useCallback(async () => {
@@ -83,8 +92,10 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       // when all that was wrong was the order it arrived in.
       const report =
         edits.remaining > 0
-          ? { sent: 0, dropped: 0, remaining: (await readPending()).length }
+          ? { sent: 0, dropped: 0, remaining: (await readPending()).length, blocked: edits.blocked }
           : await flush();
+      // What the queue is waiting on, as measured rather than assumed.
+      setBlocked(report.remaining > 0 || edits.remaining > 0 ? report.blocked : null);
       await collectFailures();
       await refreshPending();
       // Anything that landed changes what the server would render.
@@ -168,9 +179,41 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     void forgetFailure(id);
   }, []);
 
+  /* Nothing retries by itself: drain runs on mount, on `online`, on a return to
+     the tab, and on a new write. A queue the server refused once therefore sat
+     there until one of those happened, with no way to ask. This is the way to
+     ask. */
+  const retry = useCallback(async () => {
+    setOnline(navigator.onLine);
+    await drain();
+  }, [drain]);
+
+  const retryFailure = useCallback(
+    async (id: string) => {
+      setFailures((current) => current.filter((failure) => failure.id !== id));
+      if (await requeueFailure(id)) {
+        await refreshPending();
+        await drain();
+      }
+    },
+    [drain, refreshPending],
+  );
+
   return (
     <OfflineContext.Provider
-      value={{ pending, mutations, online, syncing, failures, record, mutate, dismissFailure }}
+      value={{
+        pending,
+        mutations,
+        online,
+        syncing,
+        blocked,
+        failures,
+        record,
+        mutate,
+        dismissFailure,
+        retry,
+        retryFailure,
+      }}
     >
       {children}
     </OfflineContext.Provider>

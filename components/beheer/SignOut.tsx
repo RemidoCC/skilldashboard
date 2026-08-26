@@ -50,7 +50,7 @@ export function SignOut() {
 
   return (
     <div className="mt-4">
-      <span className="label">Sessie</span>
+      <h3 className="label">Sessie</h3>
       <p className="mt-1 text-[13px]">
         Uitloggen wist ook wat er op dit toestel bewaard is: de opgeslagen schermen en alles wat
         nog in de wachtrij stond.

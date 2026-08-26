@@ -5,13 +5,9 @@ import { useOffline } from '@/components/offline/OfflineProvider';
 import { weekComparison, type WeekReport as Report } from '@/lib/domain/report';
 import { QUESTS_PER_WEEK, type ProposedQuest } from '@/lib/domain/quests';
 import { readableDay } from '@/lib/domain/dates';
+import { spelledDays } from '@/lib/domain/status';
+import { CAPACITIES } from '@/lib/domain/capacity';
 import type { Capacity } from '@/lib/domain/types';
-
-const CAPACITIES: { value: Capacity; label: string; hint: string }[] = [
-  { value: 'rustig', label: 'Rustig', hint: 'kleinere opdrachten, veertien dagen voor roest' },
-  { value: 'normaal', label: 'Normaal', hint: 'volle opdrachten, tien dagen voor roest' },
-  { value: 'gek', label: 'Gek', hint: 'kleinere opdrachten, eenentwintig dagen voor roest' },
-];
 
 const DISMISS_PREFIX = 'skillunit.report.';
 
@@ -107,11 +103,16 @@ export function WeekReport({
 
   return (
     <section className="recess mt-3 p-3" aria-labelledby="weekbericht">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        {/* Was the date range itself, so navigating by heading landed you on
+            "24 augustus tot 30 augustus" with no idea what it headed. */}
         <h2 id="weekbericht" className="label">
-          {readableDay(report.weekStart)} tot {readableDay(report.weekEnd)}
+          Weekbericht
         </h2>
-        <button type="button" onClick={dismiss} className="label underline underline-offset-2">
+        <span className="label">
+          {readableDay(report.weekStart)} tot {readableDay(report.weekEnd)}
+        </span>
+        <button type="button" onClick={dismiss} className="label-button label underline underline-offset-2">
           Sluiten
         </button>
       </div>
@@ -154,7 +155,7 @@ export function WeekReport({
             .map((note) =>
               note.rusted
                 ? `${note.name} roestte een niveau`
-                : `${note.name} roest over ${note.daysUntilRust} dagen`,
+                : `${note.name} roest over ${spelledDays(note.daysUntilRust)}`,
             )
             .join('. ')}
           .
@@ -225,21 +226,26 @@ export function WeekReport({
         )}
 
         <div className="mt-3 flex items-center justify-end gap-2">
-          {accepted ? (
-            <span className="label" role="status">
-              Overgenomen
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={accept}
-              disabled={picked.length === 0}
-              className="raised h-11 px-5 text-[13px]"
-              style={{ background: 'var(--signal-fill)', color: 'var(--on-signal)' }}
-            >
-              Neem over
-            </button>
-          )}
+          {/* Stays mounted once accepted: swapping it for a span dropped the
+              keyboard back to the top of the document. */}
+          <button
+            type="button"
+            onClick={accepted ? undefined : accept}
+            // aria-disabled once accepted, so the button keeps the focus it
+            // has; disabled would drop the keyboard back to the top.
+            // The name of the focused element changes, which is what a screen
+            // reader reads out; a live region on a control would be neither.
+            aria-disabled={accepted || undefined}
+            disabled={!accepted && picked.length === 0}
+            className="raised h-11 px-5 text-[13px]"
+            style={
+              accepted
+                ? undefined
+                : { background: 'var(--signal-fill)', color: 'var(--on-signal)' }
+            }
+          >
+            {accepted ? 'Overgenomen' : 'Neem over'}
+          </button>
         </div>
       </div>
     </section>

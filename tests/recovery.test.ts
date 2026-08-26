@@ -118,11 +118,23 @@ describe('the badge that comes out of it', () => {
     ).toBe('evenwichtig');
   });
 
-  it('still puts a real recovery above everything else', () => {
+  it('does not let a real recovery cover a season that went one way', () => {
+    // 8000 against 120 is the season. The comeback is real and it is small,
+    // and the badge naming it would be the report choosing the nicer of two
+    // true things.
     expect(
       badgeTheme([
         tally({ skillId: 'a', xp: 8000 }),
         tally({ skillId: 'b', xp: 120, recovered: true }),
+      ]),
+    ).toBe('toegespitst');
+  });
+
+  it('names a recovery in a season that was not dominated', () => {
+    expect(
+      badgeTheme([
+        tally({ skillId: 'a', xp: 900 }),
+        tally({ skillId: 'b', xp: 800, recovered: true }),
       ]),
     ).toBe('hersteld');
   });

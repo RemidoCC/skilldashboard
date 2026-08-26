@@ -22,6 +22,10 @@
   --focus:       #A32E00;  /* focus ring; needs 3:1 on every surface */
   --ok:     #B8E986;  /* on-screen only */
   --edge:   #C4C3BD;  /* the hard shadow under raised elements */
+  /* The hairline around a raised or recessed control. --edge carries the
+     shadow and is deliberately faint; this is the line that has to be seen,
+     so it clears 3:1 on every surface a control lands on (1.4.11). */
+  --outline: #747369;
 
   /* Unlit dots on the display keep the grid visible. */
   --dot-off: rgba(255, 255, 255, .07);
@@ -62,10 +66,42 @@
   --on-signal:   #16170F;
   --focus:       #F26A32;
   --edge:   #0C0D0B;
+  --outline: #75766E;
   --tick-off: #3A3B36;
 
   --screen-ink:   #EDECE6;
   --screen-muted: #7B7E85;
+}
+
+/* The same palette for a dark system with no JavaScript.
+
+   themeBoot resolves day or night before first paint, but it is a script: with
+   scripting off no data-theme is ever set and the paper palette was the only
+   thing on offer, whatever the device was set to. Written out rather than
+   shared because CSS has no way to reuse a declaration block —
+   tests/contrast.test.ts holds the two token for token identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='day']) {
+    --panel:  #1A1B19;
+    --recess: #131412;
+    --raised: #232420;
+    --screen: #0E0F12;
+    --ink:    #EDECE6;
+    --muted:  #94938A;
+    --signal: #D94100;
+    --signal-text: #F26A32;
+    --signal-fill: #F26A32;
+    --on-signal:   #16170F;
+    --focus:       #F26A32;
+    --edge:   #0C0D0B;
+    --outline: #75766E;
+    --tick-off: #3A3B36;
+
+    --screen-ink:   #EDECE6;
+    --screen-muted: #7B7E85;
+
+    color-scheme: dark;
+  }
 }
 
 @theme inline {
@@ -81,6 +117,7 @@
   --color-focus: var(--focus);
   --color-ok:     var(--ok);
   --color-edge:   var(--edge);
+  --color-outline: var(--outline);
   --color-screen-ink:   var(--screen-ink);
   --color-screen-muted: var(--screen-muted);
 
@@ -107,10 +144,22 @@ body {
   -webkit-font-smoothing: antialiased;
   /* The bottom tab bar sits above the home indicator. */
   padding-bottom: env(safe-area-inset-bottom);
+  /* A skill or a task can be named without a single space in it. Left alone
+     that name sets the width of its row, the row sets the width of the page,
+     and the whole screen scrolls sideways (WCAG 1.4.10). Only breaks a word
+     that will not fit on its own line. */
+  overflow-wrap: break-word;
 }
 
 /* Nothing italic, anywhere. */
 i, em, cite, address, dfn, var { font-style: normal; }
+
+/* Browsers give a fieldset `min-inline-size: min-content`, so it grows to fit
+   its widest child rather than fitting its parent. Every group of skill chips
+   is a fieldset, so one long name pushed the group past the column, the column
+   past the page, and the page sideways — truncating the chip could not help
+   while the box around it kept growing. */
+fieldset { min-inline-size: 0; }
 
 /* -------------------------------------------------------------- utilities */
 
@@ -125,9 +174,17 @@ i, em, cite, address, dfn, var { font-style: normal; }
 }
 .label-lg { font-size: 10px; }
 
-/* A manufactured, raised control: flat fill, hard offset shadow, no blur. */
+/* A manufactured, raised control: flat fill, hard offset shadow, no blur.
+
+   The hairline is not decoration. The fill alone reaches 1.29:1 against the
+   panel and 1.49:1 against a raised row, so an unselected control had no
+   perceivable boundary and a segmented group read as one button with loose
+   text beside it. --outline clears 3:1 on every surface either class lands
+   on, which is what 1.4.11 asks of a control's edge. Sizes do not move:
+   preflight puts everything on border-box. */
 .raised {
   background: var(--raised);
+  border: 1px solid var(--outline);
   border-radius: var(--radius);
   box-shadow: 0 2px 0 var(--edge);
 }
@@ -135,6 +192,7 @@ i, em, cite, address, dfn, var { font-style: normal; }
 /* An inset area that holds controls. */
 .recess {
   background: var(--recess);
+  border: 1px solid var(--outline);
   border-radius: var(--radius);
 }
 
@@ -148,6 +206,49 @@ i, em, cite, address, dfn, var { font-style: normal; }
 
 /* Values are printed in 700. */
 .value { font-weight: 700; }
+
+/* A control written as a line of text rather than as a face: the underline
+   identifies it, so it needs no hairline. What it did need is a thumb: 9px
+   type left the box 10.8px tall, a quarter of the 44px this project sets
+   itself, and two of them — Verwijderen and Doe maar — throw work away.
+
+   The box itself grows. Growing it with a pseudo-element instead would have
+   kept the rows dense, and was tried: measured on the three screens it put an
+   invisible target over four real ones, including 43px of overlap onto the
+   44px "Vandaag" chip in the row above, which would have taken taps meant for
+   it. A target you cannot see is worse than a small one. */
+.label-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+/* Off is a state, and a state has to be visible. Every disabled control used
+   to keep its full face — three primary buttons on an empty account looked
+   exactly like three working ones, and cursor: default is nothing on a phone.
+
+   A checked task keeps its filled face on purpose: there the disabled state
+   means "recorded", not "unavailable", so it opts out with data-done.
+
+   Scoped to controls that have a face. A text button has none, so painting a
+   grey box behind one would invent a control where the design has a line. */
+:where(.raised, .recess):disabled:not([data-done]),
+:where(.raised, .recess)[aria-disabled='true'] {
+  background: var(--recess) !important;
+  color: var(--muted) !important;
+  border-color: var(--edge) !important;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* A text button that has done its work: still there, still focusable, no
+   longer an invitation. `disabled` would have been simpler and moves focus to
+   the body — which is exactly the place a keyboard should not be sent back to
+   after confirming one entry in a long log. */
+.label-button[aria-disabled='true'] {
+  text-decoration: none;
+  cursor: default;
+}
 
 /* Placeholder text is still text, so it meets the same bar as a label
    rather than whatever grey the browser picks. */

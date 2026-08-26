@@ -156,7 +156,7 @@ function readMutations(database) {
 /* A write that can never succeed is parked, not discarded. The worker usually
  * runs with no page open, so a message would go nowhere and the user would
  * never learn that something they logged was thrown away. */
-function park(database, item, message) {
+function park(database, item, message, signIn) {
   return new Promise((resolve, reject) => {
     const tx = database.transaction(FAILURE_STORE, 'readwrite');
     tx.objectStore(FAILURE_STORE).put({
@@ -164,6 +164,10 @@ function park(database, item, message) {
       title: item.title,
       message,
       occurredAt: item.occurredAt,
+      // Kept whole and reset, so the page can offer to send it again. Without
+      // it the only thing left to do with a parked write is throw it away.
+      item: { ...item, attempts: 0 },
+      signIn: signIn === true,
     });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -356,7 +360,7 @@ async function drainQueue() {
 
     // 4xx can never land: park it so the next page load can report it.
     if (response.status >= 400 && response.status < 500) {
-      await park(database, item, await messageFrom(response));
+      await park(database, item, await messageFrom(response), response.status === 401);
       await remove(database, item.id);
       parked += 1;
       continue;

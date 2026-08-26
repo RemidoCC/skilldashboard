@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
+import { readableDay } from '@/lib/domain/dates';
 import { GoalProposalFlow } from './GoalProposals';
+import { ConfirmAction } from './ConfirmAction';
 import type { Skill, Task } from '@/lib/domain/types';
 import type { Goal } from '@/lib/offline/mutations';
 
@@ -61,7 +63,7 @@ export function GoalManager({
                   </p>
                   <span className="label mt-0.5 block">
                     {skill?.name ?? 'Onbekend'}
-                    {goal.targetDate ? ` · voor ${goal.targetDate}` : ''}
+                    {goal.targetDate ? ` · voor ${readableDay(goal.targetDate)}` : ''}
                     {goal.done ? ' · afgerond' : ` · ${goal.progress} procent`}
                   </span>
                 </div>
@@ -80,37 +82,20 @@ export function GoalManager({
                 </button>
               </div>
 
-              {goal.done ? null : (
-                <div className="mt-2.5">
-                  <label htmlFor={`progress-${goal.id}`} className="label">
-                    Voortgang
-                  </label>
-                  <input
-                    id={`progress-${goal.id}`}
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={goal.progress}
-                    onChange={(e) =>
-                      void mutate({
-                        kind: 'goal.update',
-                        id: goal.id,
-                        patch: { progress: Number(e.target.value) },
-                      })
-                    }
-                    className="mt-1.5 h-11 w-full accent-[var(--signal-fill)]"
-                  />
-                </div>
-              )}
+              {goal.done ? null : <ProgressSlider goal={goal} />}
 
-              <button
-                type="button"
-                onClick={() => void mutate({ kind: 'goal.delete', id: goal.id })}
-                className="label mt-1 underline underline-offset-2"
-              >
-                Verwijderen
-              </button>
+              {/* A goal is the one thing in Beheer that is really deleted — a
+                  task is archived and comes back. It used to go on one tap,
+                  from a 9px line halfway down the screen, with no way back. */}
+              <div className="mt-1">
+                <ConfirmAction
+                  label="Verwijderen"
+                  cost={`Dit doel en zijn voortgang van ${goal.progress} procent verdwijnen.`}
+                  confirmLabel="Doe maar"
+                  confirmName={`Doe maar, ${goal.title} verwijderen`}
+                  onConfirm={() => void mutate({ kind: 'goal.delete', id: goal.id })}
+                />
+              </div>
             </li>
           );
         })}
@@ -147,6 +132,51 @@ export function GoalManager({
       )}
 
     </section>
+  );
+}
+
+/**
+ * The progress of a goal.
+ *
+ * The value is held here and written when the thumb is let go. Writing on
+ * every change meant dragging from nothing to done put twenty `goal.update`
+ * mutations in IndexedDB and twenty requests on the wire, for one decision.
+ */
+function ProgressSlider({ goal }: { goal: Goal }) {
+  const { mutate } = useOffline();
+  const [value, setValue] = useState(goal.progress);
+
+  // A write that lands elsewhere — the worker draining, another tab — has to
+  // win over a stale local value.
+  useEffect(() => setValue(goal.progress), [goal.progress]);
+
+  const commit = () => {
+    if (value === goal.progress) return;
+    void mutate({ kind: 'goal.update', id: goal.id, patch: { progress: value } });
+  };
+
+  return (
+    <div className="mt-2.5">
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={`progress-${goal.id}`} className="label">
+          Voortgang
+        </label>
+        <span className="value text-[13px]">{value} procent</span>
+      </div>
+      <input
+        id={`progress-${goal.id}`}
+        type="range"
+        min={0}
+        max={100}
+        step={5}
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+        className="mt-1.5 h-11 w-full accent-[var(--signal-fill)]"
+      />
+    </div>
   );
 }
 
@@ -212,16 +242,18 @@ function GoalCreator({
                 type="button"
                 onClick={() => setSkillId(skill.id)}
                 aria-pressed={selected}
-                className="raised flex h-11 items-center gap-1.5 px-2.5 text-[12px]"
+                className="raised flex h-11 min-w-0 max-w-full items-center gap-1.5 px-2.5 text-[12px]"
                 style={{
                   background: selected ? 'var(--ink)' : undefined,
                   color: selected ? 'var(--panel)' : 'var(--ink)',
                 }}
               >
-                <span style={{ color: selected ? 'var(--panel)' : skill.color }}>
+                <span className="shrink-0" style={{ color: selected ? 'var(--panel)' : skill.color }}>
                   <SkillGlyph name={skill.glyph} size={12} />
                 </span>
-                {skill.name}
+                {/* A 40-character name with no space in it used to push the row
+                    to 556px and take the whole page sideways with it. */}
+                <span className="truncate">{skill.name}</span>
               </button>
             );
           })}

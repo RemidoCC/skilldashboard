@@ -163,7 +163,7 @@ export function TimerTask({
       </div>
 
       {running ? (
-        <button type="button" onClick={cancel} className="label mt-1.5 underline underline-offset-2">
+        <button type="button" onClick={cancel} className="label-button label mt-1.5 underline underline-offset-2">
           Annuleren zonder loggen
         </button>
       ) : open ? (
@@ -172,7 +172,7 @@ export function TimerTask({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="label mt-1.5 underline underline-offset-2"
+          className="label-button label mt-1.5 underline underline-offset-2"
         >
           Notitie toevoegen
         </button>

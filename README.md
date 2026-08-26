@@ -423,9 +423,19 @@ The signature element is the dot-matrix display: a real 5×7 bitmap per digit
 (`components/instrument/font5x7.ts`) drawn as circles, with unlit dots left
 faintly visible so the grid reads as hardware. Skill meters are 240° analogue
 gauges with every fifth tick lengthened; a rusting skill turns its lit ticks to
-the signal colour.
+the signal colour. The display shows every reading it has at once rather than
+rotating through them: a rotation hides two thirds of what it measures, and the
+reading you least want to see is the one it would hide.
 
-Screenshots of both palettes are in `docs/screenshots/`.
+Every `.raised` and `.recess` carries a 1px `--outline` hairline. The fill
+alone reaches 1.29:1 against the panel, so an unselected control had no
+perceivable boundary and a segmented group read as one button with loose text
+beside it. A control written as a line of text — `.label-button` — has no face
+and needs no hairline, but does get a 44px box to hit.
+
+Screenshots of both palettes are in `docs/screenshots/`. The interface audit of
+26 August 2026, its findings and what was done about them, is in
+`docs/audits/uiux-2026-08-26.md`.
 
 ### Contrast
 
@@ -442,6 +452,7 @@ bar, lit ticks — while three derived tokens carry the cases it cannot:
 | `--signal-text` | `--signal` reaches 2.62:1 on `--panel`; a warning sentence needs 4.5:1 |
 | `--signal-fill` / `--on-signal` | a button face and its label, passing in both palettes |
 | `--focus` | WCAG 2.4.11 wants 3:1 for a focus ring against every surface it lands on |
+| `--outline` | 1.4.11 wants the same of a control's boundary, and `--edge` reaches 1.19:1 |
 
 Every text pair the app renders clears AA with headroom — the tightest is
 4.61:1 — and several reach AAA. Placeholders are given an explicit colour
@@ -449,6 +460,19 @@ rather than the browser's default grey, which lands around 2.5:1.
 `tests/contrast.test.ts` reads the real tokens out of the stylesheet, models
 the day-to-night cascade the way the browser does, and checks every pair, so
 none of this can drift.
+
+Measured in the browser rather than from the tokens, on 26 August 2026: 1396
+text pairs across nine screen states and both palettes, none below the bar;
+95 of 95 reachable elements showing a focus ring of at least 4.8:1; no control
+smaller than 44 × 44 and none overlapping another; and no axe-core violations
+on any of the eighteen states. `tests/uiux-audit.test.ts` holds the structural
+half of that down — a selector that cannot match is invisible to the eye and
+to a scanner both.
+
+The night palette is written twice: once for `[data-theme='night']`, once
+under `prefers-color-scheme: dark` for a dark system with no JavaScript to run
+`themeBoot`. CSS cannot share a declaration block, so a test holds the two
+identical.
 
 ## Status
 

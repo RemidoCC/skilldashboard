@@ -60,6 +60,9 @@ export function TaskRow({ task, skill, streakDays }: { task: Task; skill: Skill;
           type="button"
           onClick={tap}
           disabled={done}
+          // Disabled here means "recorded", not "unavailable", so it keeps its
+          // filled face instead of taking the grey disabled treatment.
+          data-done={done ? '' : undefined}
           aria-label={`${task.title} afvinken`}
           className="recess grid h-11 w-11 shrink-0 place-items-center"
           style={{
@@ -84,7 +87,7 @@ export function TaskRow({ task, skill, streakDays }: { task: Task; skill: Skill;
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="label mt-1.5 underline underline-offset-2"
+          className="label-button label mt-1.5 underline underline-offset-2"
         >
           Notitie toevoegen
         </button>

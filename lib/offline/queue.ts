@@ -131,8 +131,13 @@ async function forgetMutation(queueId: string): Promise<void> {
  * must not arrive the other way round — so a blocked queue waits rather than
  * skipping ahead.
  */
-export async function flushMutations(): Promise<{ sent: number; remaining: number }> {
+export async function flushMutations(): Promise<{
+  sent: number;
+  remaining: number;
+  blocked: Blocked;
+}> {
   let sent = 0;
+  let blocked: Blocked = null;
   for (const item of await pendingMutations()) {
     let response: Response;
     try {
@@ -142,7 +147,8 @@ export async function flushMutations(): Promise<{ sent: number; remaining: numbe
         body: JSON.stringify(item.mutation),
       });
     } catch {
-      break; // Offline. Everything behind it waits too.
+      blocked = 'offline'; // Everything behind it waits too.
+      break;
     }
 
     if (response.ok) {
@@ -172,10 +178,11 @@ export async function flushMutations(): Promise<{ sent: number; remaining: numbe
       continue;
     }
 
-    break; // Server trouble: keep it and stop, so order holds.
+    blocked = 'server'; // Keep it and stop, so order holds.
+    break;
   }
 
-  return { sent, remaining: (await pendingMutations()).length };
+  return { sent, remaining: (await pendingMutations()).length, blocked };
 }
 
 /** A short human name for a mutation, used when one has to be reported. */
@@ -212,10 +219,21 @@ export function describeMutation(mutation: Mutation): string {
 
 /* ----------------------------------------------------------- completions -- */
 
+/**
+ * Why a queue that still has work in it is not moving.
+ *
+ * `null` means it emptied. The distinction matters because the sync bar used
+ * to report every stalled queue as "wacht op verbinding", including the case
+ * where the connection is fine and the server is refusing — an instrument
+ * naming a cause it had not measured.
+ */
+export type Blocked = 'offline' | 'server' | null;
+
 export interface FlushReport {
   sent: number;
   dropped: number;
   remaining: number;
+  blocked: Blocked;
 }
 
 /**
@@ -235,14 +253,31 @@ export async function dismissFailure(id: string): Promise<void> {
   await database.delete(FAILURE_STORE, id);
 }
 
-async function park(item: PendingCompletion, message: string): Promise<void> {
+async function park(
+  item: PendingCompletion,
+  message: string,
+  signIn = false,
+): Promise<void> {
   const database = await db();
   await database.put(FAILURE_STORE, {
     id: item.id,
     title: item.title,
     message,
     occurredAt: item.occurredAt,
+    // Kept whole, so "Opnieuw proberen" has something to send.
+    item: { ...item, attempts: 0 },
+    signIn,
   } satisfies FailedCompletion);
+}
+
+/** Puts a parked failure back in the queue, so it can be tried again. */
+export async function requeueFailure(id: string): Promise<boolean> {
+  const database = await db();
+  const failure = (await database.get(FAILURE_STORE, id)) as FailedCompletion | undefined;
+  if (!failure?.item) return false;
+  await database.put(QUEUE_STORE, { ...failure.item, attempts: 0 });
+  await database.delete(FAILURE_STORE, id);
+  return true;
 }
 
 /**
@@ -253,7 +288,7 @@ async function park(item: PendingCompletion, message: string): Promise<void> {
  * A 5xx or a dead network leaves it in place for the next attempt.
  */
 export async function flush(): Promise<FlushReport> {
-  const report: FlushReport = { sent: 0, dropped: 0, remaining: 0 };
+  const report: FlushReport = { sent: 0, dropped: 0, remaining: 0, blocked: null };
   const items = await pending();
 
   for (const item of items) {
@@ -268,6 +303,7 @@ export async function flush(): Promise<FlushReport> {
       // Offline or the request never landed. Keep it and stop trying for now;
       // the rest of the queue will not fare any better.
       report.remaining = items.length - report.sent - report.dropped;
+      report.blocked = 'offline';
       return report;
     }
 
@@ -287,7 +323,7 @@ export async function flush(): Promise<FlushReport> {
       } catch {
         // Keep the default message.
       }
-      await park(item, message);
+      await park(item, message, response.status === 401);
       await forget(item.id);
       report.dropped += 1;
       continue;
@@ -305,6 +341,8 @@ export async function flush(): Promise<FlushReport> {
       continue;
     }
 
+    // The connection is fine; the server is refusing. Say which.
+    report.blocked = 'server';
     await bumpAttempts(item);
   }
 

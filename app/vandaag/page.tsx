@@ -30,15 +30,40 @@ export default async function VandaagPage() {
   const skillsById = new Map(data.skills.map((s) => [s.id, s]));
   const today = data.tasks.filter((t) => t.onToday);
   const overflowing = today.length > TODAY_LIMIT;
+  // Quick logging writes to a skill, so with none switched on it is not on
+  // offer — and pointing at it would be pointing at nothing.
+  const canQuickLog = data.skills.some((s) => s.active);
 
   return (
     <>
       <main className="mx-auto max-w-md px-4 pb-24">
-        <Header seasonLabel={data.seasonLabel} />
+        <Header screen="Vandaag" seasonLabel={data.seasonLabel} />
 
         <SyncBar />
         <InstallPrompt />
 
+        <Instrument
+          skills={data.skills}
+          today={data.today}
+          capacity={data.capacity}
+          balanceSentence={data.balanceSentence}
+          serverXpToday={data.xpToday}
+          streakDays={data.streakDays}
+          quests={
+            data.quests.length > 0
+              ? {
+                  total: data.quests.length,
+                  completed: data.quests.filter((q) => q.completed).length,
+                }
+              : null
+          }
+        />
+
+        <FreezeNote frozenDays={data.frozenDays} held={data.freezes.filter((f) => f.spentOn === null).length} />
+
+        {/* Below the display, not above it. On a Sunday the report used to push
+            the instrument to 793px and the first tick to 1070px — 1.3 screens
+            of scrolling to do the one thing you open the app for. */}
         {data.report ? (
           <WeekReport
             report={data.report}
@@ -48,17 +73,6 @@ export default async function VandaagPage() {
             nextCapacity={data.nextCapacity}
           />
         ) : null}
-
-        <Instrument
-          skills={data.skills}
-          today={data.today}
-          capacity={data.capacity}
-          balanceSentence={data.balanceSentence}
-          serverXpToday={data.xpToday}
-          streakDays={data.streakDays}
-        />
-
-        <FreezeNote frozenDays={data.frozenDays} held={data.freezes.filter((f) => f.spentOn === null).length} />
 
         {/* ------------------------------------------------------ je drie -- */}
         <section className="mt-6" aria-labelledby="je-drie">
@@ -73,15 +87,15 @@ export default async function VandaagPage() {
 
           {overflowing ? (
             <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }}>
-              Er staan {today.length} taken op vandaag. Drie is het maximum dat scherp blijft;
-              haal er {today.length - TODAY_LIMIT} af in Beheer.
+              Er staan {today.length} taken op vandaag. Het maximum is {TODAY_LIMIT}; haal er{' '}
+              {today.length - TODAY_LIMIT} af in Beheer.
             </p>
           ) : null}
 
           {today.length === 0 ? (
             <p className="mt-2 text-[13px]" style={{ color: 'var(--muted)' }}>
-              Nog niets voor vandaag. Zet in Beheer maximaal drie taken op vandaag, of noteer
-              hieronder direct wat je gedaan hebt.
+              Nog niets voor vandaag. Zet in Beheer maximaal drie taken op vandaag
+              {canQuickLog ? ', of noteer hieronder direct wat je gedaan hebt.' : '.'}
             </p>
           ) : (
             <ul className="mt-2 space-y-2">

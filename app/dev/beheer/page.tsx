@@ -25,7 +25,7 @@ export default async function DevBeheerPage({
   return (
     <>
       <main className="mx-auto max-w-md px-4 pb-24">
-        <Header seasonLabel={null} />
+        <Header screen="Beheer" seasonLabel={null} />
         <SyncBar />
         <div className="mt-5">
           <BeheerBoard

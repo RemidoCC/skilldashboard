@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useOffline } from '@/components/offline/OfflineProvider';
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
 import { ValueSlider } from './ValueSlider';
+import { ConfirmAction } from './ConfirmAction';
 import type { Skill } from '@/lib/domain/types';
 import type { MappingRuleRow } from '@/lib/offline/mutations';
 
@@ -49,6 +50,7 @@ export function MappingRules({
   const { mutate } = useOffline();
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const active = skills.filter((s) => s.active);
   const byId = new Map(skills.map((s) => [s.id, s]));
   const note = status ? STATUS_NOTES[status] : null;
@@ -56,12 +58,25 @@ export function MappingRules({
   // ask Google with, and a key to store the answer under.
   const canConnect = configured && keyed;
 
+  /**
+   * Every other write in the app names its failure. This one had no catch at
+   * all: a dead connection left the promise rejecting into nothing, the reload
+   * never ran, and the button simply came back — no word said. It also never
+   * read the status, so a refusal reloaded a page where the link still stood.
+   */
   async function disconnect() {
     setDisconnecting(true);
+    setDisconnectError(null);
     try {
-      await fetch('/api/integrations/google/disconnect', { method: 'POST' });
+      const response = await fetch('/api/integrations/google/disconnect', { method: 'POST' });
+      if (!response.ok) {
+        setDisconnectError('Ontkoppelen mislukte. De koppeling staat er nog.');
+        setDisconnecting(false);
+        return;
+      }
       location.reload();
-    } finally {
+    } catch {
+      setDisconnectError('Geen verbinding. Ontkoppelen kan alleen online.');
       setDisconnecting(false);
     }
   }
@@ -85,15 +100,16 @@ export function MappingRules({
           {!canConnect ? (
             <span className="label shrink-0">Niet ingesteld</span>
           ) : connected ? (
-            <button
-              type="button"
-              onClick={disconnect}
-              disabled={disconnecting}
-              className="recess h-11 shrink-0 px-3 text-[12px]"
-              style={{ color: 'var(--signal-text)' }}
-            >
-              {disconnecting ? 'Bezig' : 'Ontkoppelen'}
-            </button>
+            <div className="shrink-0">
+              <ConfirmAction
+                label={disconnecting ? 'Bezig' : 'Ontkoppelen'}
+                cost="De toegang tot je agenda en mail vervalt en het vernieuwingstoken wordt gewist. Je regels blijven staan."
+                confirmLabel="Doe maar"
+                confirmName="Doe maar, Google ontkoppelen"
+                onConfirm={disconnect}
+                disabled={disconnecting}
+              />
+            </div>
           ) : (
             <a
               href="/api/integrations/google"
@@ -109,11 +125,17 @@ export function MappingRules({
           {!configured
             ? 'De sleutels van Google staan nog niet in de omgeving. Tot dan blijft alles verder gewoon werken.'
             : !keyed
-              ? 'TOKEN_ENCRYPTION_KEY ontbreekt. Het vernieuwingstoken gaat versleuteld de database in, dus zonder die sleutel wordt er niet gekoppeld.'
+              ? 'De sleutel waarmee het token versleuteld wordt ontbreekt in de omgeving (TOKEN_ENCRYPTION_KEY). Het vernieuwingstoken gaat versleuteld de database in, dus zonder die sleutel wordt er niet gekoppeld.'
               : connected
                 ? 'Twee keer per dag komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'
                 : 'Na koppelen komen afgelopen afspraken en verzonden mail binnen als voorstel. Er wordt niets vanzelf bijgeschreven.'}
         </p>
+
+        {disconnectError ? (
+          <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }} role="alert">
+            {disconnectError}
+          </p>
+        ) : null}
 
         {note ? (
           <p
@@ -154,13 +176,15 @@ export function MappingRules({
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void mutate({ kind: 'rule.delete', id: rule.id })}
-                  className="label mt-1.5 underline underline-offset-2"
-                >
-                  Verwijderen
-                </button>
+                <div className="mt-1.5">
+                  <ConfirmAction
+                    label="Verwijderen"
+                    cost={`De regel "${rule.pattern}" verdwijnt. Wat hij al voorgesteld heeft blijft staan.`}
+                    confirmLabel="Doe maar"
+                    confirmName={`Doe maar, de regel ${rule.pattern} verwijderen`}
+                    onConfirm={() => void mutate({ kind: 'rule.delete', id: rule.id })}
+                  />
+                </div>
               </li>
             );
           })}
@@ -264,16 +288,18 @@ function RuleCreator({ skills, onDone }: { skills: Skill[]; onDone: () => void }
                 type="button"
                 onClick={() => setSkillId(skill.id)}
                 aria-pressed={selected}
-                className="raised flex h-11 items-center gap-1.5 px-2.5 text-[12px]"
+                className="raised flex h-11 min-w-0 max-w-full items-center gap-1.5 px-2.5 text-[12px]"
                 style={{
                   background: selected ? 'var(--ink)' : undefined,
                   color: selected ? 'var(--panel)' : 'var(--ink)',
                 }}
               >
-                <span style={{ color: selected ? 'var(--panel)' : skill.color }}>
+                <span className="shrink-0" style={{ color: selected ? 'var(--panel)' : skill.color }}>
                   <SkillGlyph name={skill.glyph} size={12} />
                 </span>
-                {skill.name}
+                {/* A 40-character name with no space in it used to push the row
+                    to 556px and take the whole page sideways with it. */}
+                <span className="truncate">{skill.name}</span>
               </button>
             );
           })}

@@ -93,10 +93,37 @@ describe('badgeTheme', () => {
     expect(badgeTheme([tally({ skillId: 'a' })])).toBe('gestaag');
   });
 
-  it('names a recovery above everything else', () => {
+  it('does not let a recovery cover a lopsided season', () => {
+    // Nine tenths into one skill, and one skill that climbed back. Both are
+    // true; the badge used to report the second and let the figures under it
+    // say the first. How the season was spent is the larger fact.
     const tallies = [
       tally({ skillId: 'a', xp: 900 }),
       tally({ skillId: 'b', xp: 100, recovered: true }),
+    ];
+    expect(badgeTheme(tallies)).toBe('toegespitst');
+  });
+
+  it('does not call a one-skill season toegespitst', () => {
+    // The only skill there is takes all of it. Reporting that as a lean would
+    // be reporting the arithmetic, not the season.
+    expect(badgeTheme([tally({ skillId: 'a', xp: 900 })])).toBe('gestaag');
+    expect(badgeTheme([tally({ skillId: 'a', xp: 900, recovered: true })])).toBe('hersteld');
+  });
+
+  it('names a recovery when it is the story of the season', () => {
+    const tallies = [
+      tally({ skillId: 'a', xp: 500 }),
+      tally({ skillId: 'b', xp: 500, recovered: true }),
+    ];
+    expect(badgeTheme(tallies)).toBe('hersteld');
+  });
+
+  it('names a recovery ahead of a merely balanced season', () => {
+    const tallies = [
+      tally({ skillId: 'a', xp: 340 }),
+      tally({ skillId: 'b', xp: 330, recovered: true }),
+      tally({ skillId: 'c', xp: 330 }),
     ];
     expect(badgeTheme(tallies)).toBe('hersteld');
   });

@@ -45,17 +45,9 @@ export default function DevVandaagPage() {
   return (
     <>
       <main className="mx-auto max-w-md px-4 pb-24">
-        <Header seasonLabel={seasonLabel} />
+        <Header screen="Vandaag" seasonLabel={seasonLabel} />
 
         <SyncBar />
-
-        <WeekReport
-          report={weekReport}
-          candidates={questCandidates}
-          nextWeekStart={nextWeekStart}
-          reportKey="dev-preview"
-          nextCapacity="normaal"
-        />
 
         <Instrument
           skills={skills}
@@ -64,9 +56,21 @@ export default function DevVandaagPage() {
           balanceSentence={balanceSentence}
           serverXpToday={xpToday}
           streakDays={streak}
+          quests={{
+            total: quests.length,
+            completed: quests.filter((q) => q.completed).length,
+          }}
         />
 
         <FreezeNote frozenDays={frozenDays} held={heldFreezes} />
+
+        <WeekReport
+          report={weekReport}
+          candidates={questCandidates}
+          nextWeekStart={nextWeekStart}
+          reportKey="dev-preview"
+          nextCapacity="normaal"
+        />
 
         <section className="mt-6" aria-labelledby="je-drie">
           <div className="flex items-baseline justify-between">

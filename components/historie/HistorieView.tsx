@@ -3,6 +3,7 @@ import { RevertButton } from './RevertButton';
 import { HISTORY_RANGES } from '@/lib/domain/trajectory';
 import { daysBetween, readableDay } from '@/lib/domain/dates';
 import { parseSeasonSummary, THEME_NOTES } from '@/lib/domain/season';
+import { dayCount } from '@/lib/domain/status';
 import type { HistoryRange, LogDay, SkillTrajectory } from '@/lib/domain/trajectory';
 import type { Tables } from '@/lib/db/database.types';
 
@@ -166,7 +167,7 @@ export function HistorieView({ data }: { data: HistorieViewData }) {
                           consequence; neither is yours to take back. */}
                       {entry.source === 'rust' || entry.source === 'quest' ? null : (
                         <div className="mt-1.5">
-                          <RevertButton entryId={entry.id} title={entry.title} />
+                          <RevertButton entryId={entry.id} title={entry.title} xp={entry.xp} />
                         </div>
                       )}
                     </li>
@@ -242,7 +243,7 @@ function Season({ season }: { season: Tables<'seasons'> }) {
             <Figure label="XP" value={String(summary.totalXp)} />
             <Figure label="niveaus" value={`+${summary.levelsGained}`} />
             <Figure label="opdrachten" value={String(summary.questsCompleted)} />
-            <Figure label="reeks" value={`${summary.longestStreak} d`} />
+            <Figure label="reeks" value={dayCount(summary.longestStreak)} />
           </div>
 
           {summary.perSkill.length > 0 ? (

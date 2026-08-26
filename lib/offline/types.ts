@@ -53,6 +53,12 @@ export interface FailedCompletion {
   title: string;
   message: string;
   occurredAt: string;
+  /** The write itself, kept so a parked failure can be sent again once the
+   *  reason it was refused is gone — a session signed back in, mostly. */
+  item?: PendingCompletion;
+  /** True when the server refused because there was no session. The message
+   *  says to sign in again; this is what lets the bar offer the way there. */
+  signIn?: boolean;
 }
 
 /** The request body the endpoint expects. */

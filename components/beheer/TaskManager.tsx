@@ -34,8 +34,8 @@ export function TaskManager({ skills, tasks }: { skills: Skill[]; tasks: Task[] 
 
       {onToday > TODAY_LIMIT ? (
         <p className="mt-2 text-[12px]" style={{ color: 'var(--signal-text)' }}>
-          Er staan {onToday} taken op vandaag. Haal er {onToday - TODAY_LIMIT} af, anders wordt
-          het een lijst in plaats van een keuze.
+          Er staan {onToday} taken op vandaag. Het maximum is {TODAY_LIMIT}; haal er{' '}
+          {onToday - TODAY_LIMIT} af.
         </p>
       ) : null}
 
@@ -94,14 +94,14 @@ export function TaskManager({ skills, tasks }: { skills: Skill[]; tasks: Task[] 
                   <button
                     type="button"
                     onClick={() => setEditing(task.id)}
-                    className="label underline underline-offset-2"
+                    className="label-button label underline underline-offset-2"
                   >
                     Bewerken
                   </button>
                   <button
                     type="button"
                     onClick={() => void mutate({ kind: 'task.update', id: task.id, patch: { archived: true } })}
-                    className="label underline underline-offset-2"
+                    className="label-button label underline underline-offset-2"
                   >
                     Archiveren
                   </button>
@@ -133,9 +133,9 @@ export function TaskManager({ skills, tasks }: { skills: Skill[]; tasks: Task[] 
           <button
             type="button"
             onClick={() => setShowArchive((v) => !v)}
-            className="label underline underline-offset-2"
+            className="label-button label underline underline-offset-2"
           >
-            Archief ({archived.length})
+            Archief · {archived.length}
           </button>
           {showArchive ? (
             <ul className="mt-2 space-y-2">
@@ -182,16 +182,16 @@ function SkillChips({
               type="button"
               onClick={() => onChange(skill.id)}
               aria-pressed={selected}
-              className="raised flex h-11 items-center gap-1.5 px-2.5 text-[12px]"
+              className="raised flex h-11 min-w-0 max-w-full items-center gap-1.5 px-2.5 text-[12px]"
               style={{
                 background: selected ? 'var(--ink)' : undefined,
                 color: selected ? 'var(--panel)' : 'var(--ink)',
               }}
             >
-              <span style={{ color: selected ? 'var(--panel)' : skill.color }}>
+              <span className="shrink-0" style={{ color: selected ? 'var(--panel)' : skill.color }}>
                 <SkillGlyph name={skill.glyph} size={12} />
               </span>
-              {skill.name}
+              <span className="truncate">{skill.name}</span>
             </button>
           );
         })}

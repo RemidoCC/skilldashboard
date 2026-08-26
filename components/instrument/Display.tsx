@@ -1,6 +1,7 @@
 import { DotMatrix } from './DotMatrix';
 import { StatusLine } from './StatusLine';
 import { romanNumeral, type Tier } from '@/lib/domain/tier';
+import { dayCount } from '@/lib/domain/status';
 
 interface Props {
   tier: Tier;
@@ -36,7 +37,7 @@ export function Display({ tier, statusLines, streakDays }: Props) {
           </p>
           {streakDays > 0 ? (
             <p className="label mt-2" style={{ color: 'var(--screen-muted)' }}>
-              Reeks {streakDays}d
+              Reeks {dayCount(streakDays)}
             </p>
           ) : null}
         </div>

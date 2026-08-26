@@ -20,6 +20,31 @@ async function redirectTarget(): Promise<string> {
   return `${proto}://${host}/auth/callback`;
 }
 
+/**
+ * What went wrong, in Dutch.
+ *
+ * Supabase answers in English, and the message it returns most often — you
+ * pressed the button twice — was going straight to the screen: "For security
+ * purposes, you can only request this after 51 seconds." The codes are matched
+ * where they are known and the rest falls back, rather than passing an English
+ * sentence through and calling it a translation.
+ */
+function describe(error: { code?: string; status?: number; message: string }): string {
+  switch (error.code) {
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+      return 'Er is net al een link verstuurd. Wacht een minuut en probeer het opnieuw.';
+    case 'validation_failed':
+      return 'Dit e-mailadres kan niet gelezen worden. Controleer of het klopt.';
+    case 'email_provider_disabled':
+      return 'Inloggen per mail staat uit op de server. Hier valt vanaf dit scherm niets aan te doen.';
+    default:
+      return error.status === 429
+        ? 'Er is net al een link verstuurd. Wacht een minuut en probeer het opnieuw.'
+        : 'Versturen mislukte. Probeer het zo nog eens.';
+  }
+}
+
 export async function sendMagicLink(
   _previous: LoginState,
   formData: FormData,
@@ -45,7 +70,7 @@ export async function sendMagicLink(
   });
 
   if (error) {
-    return { status: 'error', message: `Versturen mislukte: ${error.message}` };
+    return { status: 'error', message: describe(error) };
   }
 
   return {

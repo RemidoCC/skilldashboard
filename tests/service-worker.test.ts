@@ -89,9 +89,16 @@ describe('service worker constants', () => {
   it('parks a permanently failed write instead of discarding it', () => {
     // The worker normally runs with no page open, so a broadcast would reach
     // nobody. Anything it gives up on has to survive until a page can report it.
-    expect(source).toContain('function park(database, item, message)');
+    expect(source).toContain('function park(database, item, message, signIn)');
     expect(source).toContain('await park(database, item,');
     expect(source).toContain(`createObjectStore(FAILURE_STORE`);
+  });
+
+  it('keeps the write itself, so a parked failure can be sent again', () => {
+    // Without the item the only thing a page can offer is to throw it away.
+    expect(source).toContain('item: { ...item, attempts: 0 }');
+    expect(source).toContain('signIn: signIn === true');
+    expect(source).toContain('response.status === 401');
   });
 });
 

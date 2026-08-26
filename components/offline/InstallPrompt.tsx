@@ -68,7 +68,7 @@ export function InstallPrompt() {
 
   return (
     <div className="recess mt-3 px-3 py-2.5">
-      <span className="label">Op het beginscherm</span>
+      <h3 className="label">Op het beginscherm</h3>
       <p className="mt-1 text-[13px]">
         {event
           ? 'Zet Skill Unit op je beginscherm, dan opent hij zonder browserbalk.'

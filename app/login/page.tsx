@@ -11,9 +11,9 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
       <div className="screen px-4 py-5">
-        <span className="label" style={{ color: 'var(--screen-muted)' }}>
+        <h1 className="label" style={{ color: 'var(--screen-muted)' }}>
           Skill Unit
-        </span>
+        </h1>
         <p className="mt-2 text-[13px]" style={{ color: 'var(--screen-ink)' }}>
           Eén account. Je krijgt een link per mail, geen wachtwoord.
         </p>

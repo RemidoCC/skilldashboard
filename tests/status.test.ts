@@ -10,8 +10,16 @@ describe('dutchNumber', () => {
     expect(dutchNumber(20)).toBe('twintig');
   });
 
-  it('falls back to digits past twenty', () => {
-    expect(dutchNumber(21)).toBe('21');
+  it('spells out every number a sentence in this app can carry', () => {
+    // The longest grace period is twenty-one days. The list used to stop at
+    // twenty, so a "gek" week read "roest over 21 dagen" under a setting that
+    // says "eenentwintig dagen voor roest".
+    expect(dutchNumber(21)).toBe('eenentwintig');
+    expect(dutchNumber(30)).toBe('dertig');
+  });
+
+  it('falls back to digits beyond that rather than to nothing', () => {
+    expect(dutchNumber(31)).toBe('31');
   });
 });
 
@@ -35,7 +43,7 @@ describe('statusLines', () => {
 
   it('reports quest standings', () => {
     const lines = statusLines({ ...bare, quests: { total: 3, completed: 1 } });
-    expect(lines).toContain('een van drie opdrachten af.');
+    expect(lines).toContain('één van drie opdrachten af.');
   });
 
   it('reports a finished set of quests plainly', () => {
@@ -64,7 +72,7 @@ describe('statusLines', () => {
       ...bare,
       rust: { name: 'Werk', daysInactive: 9, daysUntilRust: 1, status: 'warning' },
     });
-    expect(lines).toContain('Werk roest over een dag.');
+    expect(lines).toContain('Werk roest over één dag.');
   });
 
   it('never uses an exclamation mark', () => {

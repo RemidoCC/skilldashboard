@@ -10,9 +10,9 @@ export default function OfflinePage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-4">
       <div className="screen px-4 py-5">
-        <span className="label" style={{ color: 'var(--screen-muted)' }}>
+        <h1 className="label" style={{ color: 'var(--screen-muted)' }}>
           Geen verbinding
-        </span>
+        </h1>
         <p className="mt-2 text-[13px]" style={{ color: 'var(--screen-ink)' }}>
           Dit scherm stond nog niet op het toestel. Wat je al bekeken hebt blijft
           beschikbaar, en wat je aftekent wordt bewaard en verstuurd zodra er weer

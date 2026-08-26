@@ -16,6 +16,8 @@ interface Props {
   balanceSentence: string | null;
   serverXpToday: number;
   streakDays: number;
+  /** How the week's quests stand. Null when there are none this week. */
+  quests: { total: number; completed: number } | null;
 }
 
 /**
@@ -32,6 +34,7 @@ export function Instrument({
   balanceSentence,
   serverXpToday,
   streakDays,
+  quests,
 }: Props) {
   const { skills: optimistic, pending } = useOptimisticSkills(skills);
   const nearest = nearestToRust(readMeters(optimistic, today, capacity));
@@ -39,7 +42,7 @@ export function Instrument({
   const lines = statusLines({
     xpToday: serverXpToday + pendingXpOn(pending, today),
     balanceSentence,
-    quests: null, // Quests arrive in phase 4.
+    quests,
     rust: nearest
       ? {
           name: nearest.skill.name,

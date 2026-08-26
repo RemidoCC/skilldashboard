@@ -1,7 +1,7 @@
 'use client';
 
 import { SkillGlyph } from '@/components/instrument/SkillGlyph';
-import { GLYPH_NAMES } from '@/lib/domain/glyphs';
+import { GLYPH_LABELS, GLYPH_NAMES } from '@/lib/domain/glyphs';
 import type { SkillGlyph as GlyphName } from '@/lib/domain/types';
 
 /** The fixed set. No emoji, and nothing to upload. */
@@ -24,7 +24,7 @@ export function GlyphPicker({
               type="button"
               onClick={() => onChange(name)}
               aria-pressed={selected}
-              aria-label={name}
+              aria-label={`Teken ${GLYPH_LABELS[name]}`}
               className="raised grid h-11 w-11 place-items-center"
               style={{
                 background: selected ? 'var(--ink)' : undefined,

@@ -34,7 +34,7 @@ describe.each([
     for (const token of [
       'panel', 'recess', 'raised', 'screen', 'ink', 'muted',
       'signal', 'signal-text', 'signal-fill', 'on-signal', 'focus',
-      'edge', 'tick-off', 'screen-ink', 'screen-muted', 'ok',
+      'edge', 'outline', 'tick-off', 'screen-ink', 'screen-muted', 'ok',
     ]) {
       expect(p[token], `--${token} missing`).toMatch(/^#[0-9A-Fa-f]{3,6}$/);
     }
@@ -92,6 +92,33 @@ describe.each([
 
   it('lit ticks stand clear of the surface they sit on', () => {
     expect(contrast(p.ink, p.raised)).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  /* WCAG 1.4.11: the boundary of a control needs 3:1 against what it sits on.
+     A .raised control lands on the panel, on a recess, and on another raised
+     row; a .recess control lands on all three too. --edge cannot carry this —
+     it reaches 1.19:1 — so the hairline is a token of its own. */
+  it.each([['panel'], ['recess'], ['raised']])(
+    'the control hairline stands out on %s',
+    (surface) => {
+      expect(contrast(p.outline, p[surface])).toBeGreaterThanOrEqual(AA_LARGE);
+    },
+  );
+});
+
+/* The night palette is written twice: once for the explicit choice, once for a
+   dark system with no JavaScript to make that choice. CSS cannot share a
+   declaration block, so the guard against drift lives here. */
+describe('the two night palettes', () => {
+  const chosen = palette(":root[data-theme='night']");
+  const system = palette(":root:not([data-theme='day']) {");
+
+  it('carry the same tokens', () => {
+    expect(Object.keys(system).sort()).toEqual(Object.keys(chosen).sort());
+  });
+
+  it('carry the same values', () => {
+    expect(system).toEqual(chosen);
   });
 });
 

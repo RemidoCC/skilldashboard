@@ -54,10 +54,15 @@ export function QuickLog({ skills, streakDays }: { skills: Skill[]; streakDays: 
   }
 
   if (skills.length === 0) {
+    // Keeps its heading: the label lives inside the form, so the empty state
+    // used to leave one grey sentence floating between two sections.
     return (
-      <p className="text-[13px]" style={{ color: 'var(--muted)' }}>
-        Zet eerst een vaardigheid aan in Beheer.
-      </p>
+      <div className="recess p-3">
+        <h3 className="label">Snel loggen</h3>
+        <p className="mt-1.5 text-[13px]" style={{ color: 'var(--muted)' }}>
+          Zet eerst een vaardigheid aan in Beheer; snel loggen schrijft altijd naar één.
+        </p>
+      </div>
     );
   }
 
@@ -88,16 +93,18 @@ export function QuickLog({ skills, streakDays }: { skills: Skill[]; streakDays: 
                 type="button"
                 onClick={() => setSkillId(skill.id)}
                 aria-pressed={selected}
-                className="raised flex h-11 items-center gap-1.5 px-2.5 text-[12px]"
+                className="raised flex h-11 min-w-0 max-w-full items-center gap-1.5 px-2.5 text-[12px]"
                 style={{
                   background: selected ? 'var(--ink)' : undefined,
                   color: selected ? 'var(--panel)' : 'var(--ink)',
                 }}
               >
-                <span style={{ color: selected ? 'var(--panel)' : skill.color }}>
+                <span className="shrink-0" style={{ color: selected ? 'var(--panel)' : skill.color }}>
                   <SkillGlyph name={skill.glyph} size={12} />
                 </span>
-                {skill.name}
+                {/* A 40-character name with no space in it used to push the row
+                    to 556px and take the whole page sideways with it. */}
+                <span className="truncate">{skill.name}</span>
               </button>
             );
           })}
@@ -111,7 +118,7 @@ export function QuickLog({ skills, streakDays }: { skills: Skill[]; streakDays: 
             <button
               type="button"
               onClick={() => setXp((v) => Math.max(v - STEP, MIN))}
-              aria-label="Waarde omlaag"
+              aria-label="− Waarde omlaag"
               className="raised h-11 w-11 text-[16px]"
             >
               −
@@ -122,7 +129,7 @@ export function QuickLog({ skills, streakDays }: { skills: Skill[]; streakDays: 
             <button
               type="button"
               onClick={() => setXp((v) => Math.min(v + STEP, MAX))}
-              aria-label="Waarde omhoog"
+              aria-label="+ Waarde omhoog"
               className="raised h-11 w-11 text-[16px]"
             >
               +

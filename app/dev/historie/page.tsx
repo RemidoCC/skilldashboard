@@ -25,7 +25,7 @@ export default async function DevHistoriePage({
   return (
     <>
       <main className="mx-auto max-w-md px-4 pb-24">
-        <Header seasonLabel={null} />
+        <Header screen="Historie" seasonLabel={null} />
         <SyncBar />
         <HistorieView data={historie} />
       </main>

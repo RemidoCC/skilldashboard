@@ -27,7 +27,7 @@ export function Goals({ goals, skills }: { goals: GoalRow[]; skills: Skill[] }) 
                 </span>
               ) : null}
               <p className="min-w-0 flex-1 truncate text-[14px] leading-tight">{goal.title}</p>
-              <span className="value shrink-0 text-[14px]">{goal.progress}%</span>
+              <span className="value shrink-0 text-[13px]">{goal.progress} procent</span>
             </div>
             <div
               className="mt-2 h-1 w-full overflow-hidden rounded-full"

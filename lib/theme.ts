@@ -83,4 +83,22 @@ export function themeBoot(): void {
   const choice = forced || stored || 'auto';
   const theme = choice === 'day' || choice === 'night' ? choice : resolve();
   document.documentElement.setAttribute('data-theme', theme);
+
+  /* The status bar of an installed app follows <meta name="theme-color">, and
+     the two the layout ships are keyed to prefers-color-scheme. This panel
+     follows sunset in Amsterdam instead, so on a light phone after dark the
+     bar stayed paper while the app went dark. Only the resolver knows which
+     it is, so it says so. */
+  try {
+    const colour = theme === 'night' ? '#1A1B19' : '#E4E3DE';
+    let tag = document.querySelector('meta[name="theme-color"]:not([media])');
+    if (!tag) {
+      tag = document.createElement('meta');
+      tag.setAttribute('name', 'theme-color');
+      document.head.appendChild(tag);
+    }
+    tag.setAttribute('content', colour);
+  } catch {
+    // No document head to speak of; the media-keyed tags still apply.
+  }
 }

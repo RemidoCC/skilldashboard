@@ -38,7 +38,7 @@ export function PickThree({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="label mt-2 underline underline-offset-2"
+        className="label-button label mt-2 underline underline-offset-2"
       >
         Kies uit je taken
       </button>
@@ -53,11 +53,11 @@ export function PickThree({
   return (
     <div className="recess mt-2 p-3">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="label">Op vandaag zetten</span>
+        <h3 className="label">Op vandaag zetten</h3>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="label underline underline-offset-2"
+          className="label-button label underline underline-offset-2"
         >
           Sluiten
         </button>
@@ -65,7 +65,7 @@ export function PickThree({
 
       {chosen >= limit ? (
         <p className="mt-1.5 text-[12px]" style={{ color: 'var(--signal-text)' }}>
-          Er staan er al {chosen}. Meer erbij maakt het een lijst in plaats van een keuze.
+          Er staan er al {chosen}. Het maximum is {limit}.
         </p>
       ) : null}
 
@@ -94,7 +94,8 @@ export function PickThree({
                 <button
                   type="button"
                   onClick={() => void put(task)}
-                  aria-label={`${task.title} op vandaag zetten`}
+                  // Starts with the visible word, or "klik Vandaag" cannot reach it (WCAG 2.5.3).
+                  aria-label={`Vandaag, ${task.title} op vandaag zetten`}
                   className="recess h-11 shrink-0 px-3 text-[12px]"
                 >
                   Vandaag
