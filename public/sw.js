@@ -5,9 +5,11 @@
  * and one background job, and a build plugin would hide all four behind
  * configuration.
  *
- * Bump VERSION to retire every old cache at once.
+ * Bump VERSION to retire every old cache at once. v4 retires the caches from
+ * before the interface repair: the whole stylesheet changed, so a shell held
+ * over from v3 would keep painting controls without their hairline.
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL_CACHE = `skillunit-shell-${VERSION}`;
 const PAGE_CACHE = `skillunit-pages-${VERSION}`;
 const ASSET_CACHE = `skillunit-assets-${VERSION}`;
