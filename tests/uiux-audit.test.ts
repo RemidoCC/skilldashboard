@@ -156,6 +156,40 @@ describe('what the sync bar reports', () => {
   });
 });
 
+describe('the Sunday report', () => {
+  const report = read('components/vandaag/WeekReport.tsx');
+
+  it('opens folded, so it does not stand between the display and a task', () => {
+    // Roughly 800px of it used to sit above everything on a Sunday.
+    expect(report).toContain('const [expanded, setExpanded] = useState(false)');
+    expect(report).toContain('aria-expanded={expanded}');
+    expect(report).toContain("aria-controls=\"weekbericht-rest\"");
+    // hidden, not display:none by class: it leaves the tab order too.
+    expect(report).toContain('hidden={!expanded}');
+  });
+
+  it('keeps a bad reading out of the fold', () => {
+    // Hiding the rust line behind a tap is the mistake the rotating status
+    // line made. The comparison and the rust note stay above it.
+    const fold = report.indexOf('<div id="weekbericht-rest"');
+    expect(fold).toBeGreaterThan(-1);
+    const summary = report.slice(report.indexOf('weekComparison(report)'), fold);
+    expect(summary).toContain('report.rust.length > 0');
+  });
+
+  it('keeps the toggle mounted, so folding does not drop the keyboard', () => {
+    // One button, below the folded part, rendered in both states — React then
+    // reuses the DOM node and the focus rides along.
+    expect(report).toContain("{expanded ? 'Inklappen' : 'Het hele weekbericht'}");
+    expect(report.indexOf("'Het hele weekbericht'")).toBeGreaterThan(
+      report.indexOf("'Neem over'"),
+    );
+    // The only place `expanded` decides what to render is that label: the body
+    // is hidden, not unmounted, and the toggle is never conditional.
+    expect(report.match(/expanded \?/g)).toHaveLength(1);
+  });
+});
+
 describe('the display', () => {
   it('shows every reading at once instead of rotating through them', () => {
     // Six seconds a line, forever, with no way to pause it (WCAG 2.2.2) — and

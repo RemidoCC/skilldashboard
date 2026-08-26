@@ -21,3 +21,4 @@ en hetzelfde harnas, zodat de twee naast elkaar te leggen zijn.
 | `verholpen-e-doel-verwijderen.png` | 7 — verwijderen vraagt nu eerst | `bewijs-k-doel-verwijderen.png` |
 | `verholpen-f-display.png` | 3 en leidende regel c — alle metingen tegelijk, met de opdrachtenstand | `bewijs-g-zondagsrapport.png` |
 | `verholpen-g-offline-wachtrij.png` | 2 — de balk noemt de gemeten oorzaak | `bewijs-l-online-maar-wacht-op-verbinding.png` |
+| `verholpen-h-weekbericht-ingeklapt.png` | 20 — het weekbericht opent gevouwen, met de roestregel erboven | `bewijs-g-zondagsrapport.png` |

@@ -35,6 +35,7 @@ export function WeekReport({
 }) {
   const { mutate } = useOffline();
   const [dismissed, setDismissed] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [chosen, setChosen] = useState<string[]>(() =>
     candidates.slice(0, QUESTS_PER_WEEK).map((q) => q.skillId),
@@ -117,8 +118,27 @@ export function WeekReport({
         </button>
       </div>
 
+      {/* What stays visible when it is folded: the week in one line, and the
+          skills that rusted or are about to. Folding the report was the point —
+          it is roughly 800px and it stood between the display and the one thing
+          you open the app for — but a bad reading behind a tap is the same
+          mistake the rotating status line made, so those two lines stay out. */}
       <p className="mt-2 text-[13px]">{weekComparison(report)}</p>
 
+      {report.rust.length > 0 ? (
+        <p className="mt-2 text-[13px]" style={{ color: 'var(--signal-text)' }}>
+          {report.rust
+            .map((note) =>
+              note.rusted
+                ? `${note.name} roestte een niveau`
+                : `${note.name} roest over ${spelledDays(note.daysUntilRust)}`,
+            )
+            .join('. ')}
+          .
+        </p>
+      ) : null}
+
+      <div id="weekbericht-rest" hidden={!expanded}>
       {/* ------------------------------------------------------ per skill -- */}
       <ul className="mt-3 space-y-1.5">
         {report.skills.map((skill) => {
@@ -144,19 +164,6 @@ export function WeekReport({
         <p className="mt-3 text-[13px]">
           {report.levelled
             .map((row) => `${row.name} ging van ${row.from} naar ${row.to}`)
-            .join('. ')}
-          .
-        </p>
-      ) : null}
-
-      {report.rust.length > 0 ? (
-        <p className="mt-2 text-[13px]" style={{ color: 'var(--signal-text)' }}>
-          {report.rust
-            .map((note) =>
-              note.rusted
-                ? `${note.name} roestte een niveau`
-                : `${note.name} roest over ${spelledDays(note.daysUntilRust)}`,
-            )
             .join('. ')}
           .
         </p>
@@ -247,6 +254,21 @@ export function WeekReport({
             {accepted ? 'Overgenomen' : 'Neem over'}
           </button>
         </div>
+      </div>
+      </div>
+
+      {/* Same element in both states, so unfolding and folding again keeps the
+          keyboard where it was instead of dropping it to the top. */}
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={() => setExpanded((open) => !open)}
+          aria-expanded={expanded}
+          aria-controls="weekbericht-rest"
+          className="label-button label underline underline-offset-2"
+        >
+          {expanded ? 'Inklappen' : 'Het hele weekbericht'}
+        </button>
       </div>
     </section>
   );

@@ -500,6 +500,15 @@ identical.
       the rust job could not write at all. See
       [The rules](#the-rules) for what changed.
 
+- [x] **Interface audit and repair.** A screen-by-screen audit of tone,
+      accessibility, edge states, usability and consistency
+      (`docs/audits/uiux-2026-08-26.md`), measured in a real browser in both
+      palettes, and the twenty-seven findings it produced plus four the repair
+      itself turned up. The headline is the measuring half of the governing
+      rule: the sync bar named a cause it had never measured, the display
+      rotated away two thirds of its readings, and the quest reading it had
+      been computing since phase four was never wired to the screen.
+
 Rust and freeze storage were open after phase 1 and are now settled — see
 [The rules](#the-rules). The mechanics themselves (the decay job, the weekly
 grant, the Sunday report) land in phase 4; the schema, the domain functions and
