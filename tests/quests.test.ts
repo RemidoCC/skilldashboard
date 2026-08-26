@@ -211,3 +211,11 @@ describe('isQuestComplete', () => {
     expect(isQuestComplete({ target: 3, progress: 5 })).toBe(true);
   });
 });
+
+describe('the shape of a week', () => {
+  it('is three quests', () => {
+    // The literal, not the constant. `toHaveLength(QUESTS_PER_WEEK)` moves both
+    // sides at once and cannot fail — changing 3 to 4 left all 510 tests green.
+    expect(QUESTS_PER_WEEK).toBe(3);
+  });
+});

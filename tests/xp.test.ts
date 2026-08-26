@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { checkXp, earnedXp, timerXp, withStreakBonus } from '@/lib/domain/xp';
+import {
+  MAX_STREAK_BONUS_DAYS,
+  checkXp,
+  earnedXp,
+  timerXp,
+  withStreakBonus,
+} from '@/lib/domain/xp';
 
 describe('checkXp', () => {
   it('is the task value', () => {
@@ -52,10 +58,15 @@ describe('withStreakBonus', () => {
     expect(withStreakBonus(15, 10)).toBe(17);
   });
 
-  it('caps the bonus at twenty days', () => {
-    expect(withStreakBonus(100, 20)).toBe(120);
-    expect(withStreakBonus(100, 45)).toBe(120);
-    expect(withStreakBonus(100, 365)).toBe(120);
+  it('caps the bonus at thirty days', () => {
+    // Written against the number rather than against MAX_STREAK_BONUS_DAYS: a
+    // test that compares the rule to itself moves whenever the rule does, and
+    // then it is not a test of anything.
+    expect(withStreakBonus(100, 29)).toBe(129);
+    expect(withStreakBonus(100, 30)).toBe(130);
+    expect(withStreakBonus(100, 31)).toBe(130);
+    expect(withStreakBonus(100, 365)).toBe(130);
+    expect(MAX_STREAK_BONUS_DAYS).toBe(30);
   });
 
   it('treats a negative streak as no streak', () => {

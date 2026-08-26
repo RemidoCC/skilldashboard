@@ -78,6 +78,12 @@ own — which matters, because a bug there silently corrupts months of history.
 **Level curve.** `xp_needed(level) = round(100 * level^1.6)`. XP carries over on
 level-up and a single completion can cascade several levels.
 
+**What a completion is worth.** A checked task pays its face value; a timer pays
+that value per ten minutes. On top of that comes the streak bonus: one percent
+per consecutive day, to a maximum of **thirty**. Every formula keeps whole
+numbers until the last division, so a tie lands on an exact half and rounding
+is the same everywhere.
+
 **Floors.** `floor_level` is claimed each time a skill crosses a multiple of 5,
 and floors are permanent. Rust can never take a skill below one.
 
@@ -85,8 +91,9 @@ and floors are permanent. Rust can never take a skill below one.
 entry and everything it set in motion — a quest it advanced, the bonus it paid,
 a suggestion it accepted — then replays what is left. The levels are never
 adjusted by hand: the ledger is authoritative, so `recalculate_levels` rebuilds
-them. It is the one caller that rebuilds **floors** too, because a floor bought
-by a mis-tap was never earned. Rust and quest bonuses refuse to be reverted
+them. It rebuilds **floors** too, because a floor bought by a mis-tap was never
+earned — and it does so for the one skill whose entry disappeared, not for the
+whole account. Rust and quest bonuses refuse to be reverted
 directly: neither is something you did, so you undo the completion that caused
 them instead.
 
@@ -111,8 +118,25 @@ any gap found — would manufacture a streak that was never earned.
 for every level up to 120. `log_entries` is the ledger; level and XP are
 derived state that a rebuild can always reconstruct from it.
 
+**`apply_xp` is not on the API.** It is the step that moves a level, and a
+client calling it directly would move one with nothing in the ledger to show
+for it. It lives in an `internal` schema, which PostgREST does not serve, and
+`authenticated` is granted execute there so that `log_completion` — which is
+`security invoker`, so RLS still decides every row — can call it. The first
+attempt at this was a plain `revoke execute` on `public.apply_xp`, which took
+the right away from the caller *and* from `log_completion` running as that
+caller: every completion failed with `permission denied for function apply_xp`
+and nothing reached the ledger. Every SQL test held the connection as the
+database owner, so all 510 of them passed. The suites now take the role the
+browser has (`tests/support/db.ts`), which is the only reason that class of
+bug is visible at all.
+
 **Writes are atomic and replayable.** `public.log_completion` inserts the ledger
-entry and advances the skill in one call. The client supplies the entry id, so
+entry and advances the skill in one call. It takes the account from
+`auth.uid()`, falling back to `p_user` only when there is no session at all —
+which in practice means a scheduled job holding the service role, whose token
+carries no `sub` claim. A signed-in caller can never aim a write somewhere
+else: `auth.uid()` wins, and RLS would refuse the row anyway. The client supplies the entry id, so
 a mutation replayed after a reconnect lands exactly once — which is what the
 offline queue in phase 2 will depend on.
 
@@ -173,7 +197,10 @@ Three things stand between a file and the database:
   same thing again.
 - Levels are then rebuilt from the restored ledger, not read from the file. A
   file with hand-edited levels restores to what its history actually supports.
-  Floors are left alone; a floor once earned is not given back.
+  **Floors are rebuilt from it too.** They were not, once — and `floor_level` is
+  the field worth forging, because `rustXpDelta` returns zero at or below a
+  floor, so a floor the history never earned switches decay off for that skill
+  permanently. Derived state is derived from the ledger, without exceptions.
 
 A restore replaces rather than merges, and the screen says so before the second
 tap: what is in the file, in counts, and what is about to go, in words.
@@ -202,9 +229,13 @@ showing up — and for the same reason it counts towards neither your streak nor
 the day's XP.
 
 **Freezes.** Earned once per completed week that was actually worked, at most
-three held. Spent on the day that would otherwise have broken the streak, and
-the day it covered is named on the screen: a freeze that quietly saved a run
-would make it read as unbroken effort.
+three held. Spent on the day that would otherwise have broken the streak,
+including one earned in the same run of the job — which is the run that tends
+to need it: a week worked through, Sunday missed, the job firing on Monday.
+The day it covered is named on the screen: a freeze that quietly saved a run
+would make it read as unbroken effort. One is only spent when the day before
+the gap was itself covered; once a gap is two days wide the streak is already
+gone, and a freeze spent on it buys nothing.
 
 **The week's capacity is chosen in the Sunday report**, for the *coming* week —
 Sunday evening is when you know what next week looks like, and it is written
@@ -216,15 +247,26 @@ the whole mechanic it drives — quest targets ×0.5 / ×0.75, rust grace of
 **The Sunday report** is computed when it is asked for rather than stored — it
 derives entirely from the ledger, so a live one can never be stale. It is on
 offer from Sunday 18:00 through Monday, because a report you can only see on
-Sunday evening is a report you will miss. It states what came in against last
+Sunday evening is a report you will miss. The dismissal key is the Monday of
+the week that *ended*, and `reportKey` works that out from the day key rather
+than from `new Date().getDay()` — on a UTC host, Amsterdam's Monday before two
+in the morning is still Sunday there, and the key pointed at the week that had
+not happened yet. It states what came in against last
 week, what levelled, what rusted or is close, the balance sentence, and the
 three quests the coming week would ask, each swappable before you take them
 over.
 
 **Seasons.** Twelve weeks. At the end the badge is derived from what actually
-happened — `hersteld` when a skill climbed back from rust, `toegespitst` when
-one skill took over half, `evenwichtig` when none passed 40% — and the tally
-goes into `seasons.summary`. Levels and floors carry over; only quests reset.
+happened — `hersteld` when a skill fell back inside the season and climbed out
+again, `toegespitst` when one skill took more than 55%, `evenwichtig` when none
+passed 40% — and the tally goes into `seasons.summary`.
+
+`hersteld` needs an actual dip, which is `recoveredWithin` in
+`lib/domain/trajectory.ts`: a day below the highest level the skill had already
+reached, and an ending at or above that high point. Asking only whether the
+peak was above the starting level, as the first cut did, is true of any skill
+that simply went up — so every season came out `hersteld` and the other two
+words could not be reached. Levels and floors carry over; only quests reset.
 
 **Goal proposals** are scaffolding, not insight. There is no model reading the
 goal, so the app offers the shape most goals need — regular work, a weekly
@@ -244,7 +286,10 @@ thrown out, and nothing reaches the database until it is confirmed.
 
 All three need `CRON_SECRET` (Vercel sends it as a bearer token) and
 `SUPABASE_SERVICE_ROLE_KEY` — a cron run has no session, so it cannot go
-through RLS the way a request does. Without either, the route refuses and says
+through RLS the way a request does. That is also why the rust job names the
+account explicitly when it calls `log_completion`: the service-role token
+carries no `sub`, so `auth.uid()` inside the function is null and the write is
+refused without it. Without either, the route refuses and says
 which one is missing. The sync job additionally needs `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET`; without them it reports that Google is not configured
 and does nothing.
@@ -348,8 +393,21 @@ Beheer runs through the same outbox, in a second store. Completions are
 additive and idempotent by entry id; edits overwrite, so they replay **in
 order** and a blocked one stops the run rather than letting later edits jump
 it — renaming a skill and then switching it off must not arrive the other way
-round. Edits are also sent before completions, because a completion can name a
-task that so far exists only in the edit queue.
+round. Their queue id is a timestamp that is nudged forward whenever it would
+repeat, because several edits queued in one loop otherwise share a millisecond
+and the random tail that keeps them from colliding then picks their order by
+coin flip.
+
+Edits are sent before completions, because a completion can name a task that so
+far exists only in the edit queue — and when an edit is *stuck*, the
+completions wait with it. Going ahead regardless is how a completion overtakes
+the task it names, comes back "Deze taak bestaat niet meer", and is parked as
+permanently failed, when all that was wrong was the order it arrived in.
+
+A completion the server keeps refusing with a 5xx is parked after eight
+attempts rather than cycling forever, and a refusal that can never succeed —
+a missing privilege, a violated constraint — is recognised by its Postgres code
+and parked at once.
 
 `npm run verify:offline` and `npm run verify:beheer` drive all of it in a real
 browser: cut the network, make the change, reload, reconnect, and check that
@@ -410,6 +468,13 @@ none of this can drift.
       inbox, and mapping rules. Waiting only on credentials.
 - [x] **Hardening.** The refresh token encrypted at rest, a restore path for
       the export, the season summary shown, and a Historie window you can open.
+- [x] **Audit and repair.** A function-by-function audit
+      (`docs/audits/functies-2026-08-25.md`) against a real Postgres, a real
+      browser and a production build, and the thirteen findings it produced.
+      The write path is the headline: `log_completion` could not run as the
+      role the browser uses, so no completion had ever reached the ledger, and
+      the rust job could not write at all. See
+      [The rules](#the-rules) for what changed.
 
 Rust and freeze storage were open after phase 1 and are now settled — see
 [The rules](#the-rules). The mechanics themselves (the decay job, the weekly
@@ -423,7 +488,14 @@ best practices 100. Every installability criterion passes (`npm run verify:pwa`)
 — Lighthouse dropped its PWA category in v12, so those are checked directly
 against what Chromium actually requires. All four browser suites pass (13 checks on
 Vandaag, 10 on Beheer, 9 on the additions, 29 on the hardening), and the cron
-routes refuse an unsigned call.
+routes refuse an unsigned call — missing, wrong, empty, without the `Bearer`
+prefix, and lower-cased.
+
+584 unit and SQL tests pass. The SQL suites connect as `authenticated` rather
+than as the database owner, so function grants and RLS are actually in force;
+taking `internal.apply_xp` away from that role again fails 31 of them. Changing
+a rule now costs tests: `REPORT_HOUR` 18→12 fails three and `QUESTS_PER_WEEK`
+3→4 fails two, where both used to leave the whole suite green.
 
 **Phase 5 is code-complete but unconnected**: `GOOGLE_CLIENT_ID` and
 `GOOGLE_CLIENT_SECRET` are not set, so no real consent screen, token exchange

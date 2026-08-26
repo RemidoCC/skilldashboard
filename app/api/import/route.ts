@@ -24,6 +24,36 @@ function refuse(error: string, status = 400) {
   return NextResponse.json({ ok: false, error }, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+/**
+ * A sentence for a database refusal, in the language the rest of the screen is
+ * written in.
+ *
+ * checkRestore catches every constraint the schema has, so reaching this is
+ * already unusual. When it happens the raw message is no use to the person
+ * holding the file — `violates check constraint "tasks_value_check"` names a
+ * constraint, not a row — and it is the one string in the app that would put
+ * English in front of the reader.
+ */
+function explain(error: { code?: string | null; message: string }): string {
+  switch (error.code) {
+    case '23514':
+      return 'Een rij in het bestand valt buiten wat de database toestaat.';
+    case '23503':
+      return 'Een rij verwijst naar iets dat niet in het bestand staat.';
+    case '23505':
+      return 'Het bestand bevat een id dat twee keer voorkomt.';
+    case '23502':
+      return 'Een rij mist een waarde die verplicht is.';
+    case '22P02':
+    case '22023':
+      return 'Een waarde in het bestand heeft niet de vorm die de database verwacht.';
+    case '42501':
+      return 'Je sessie is verlopen. Log opnieuw in.';
+    default:
+      return 'De database wees het bestand af.';
+  }
+}
+
 export async function POST(request: NextRequest) {
   const user = await currentUser();
   if (!user) return refuse('Je sessie is verlopen. Log opnieuw in.', 401);
@@ -56,7 +86,7 @@ export async function POST(request: NextRequest) {
       {
         ok: false,
         // Nothing landed: the function is one transaction.
-        error: `Terugzetten mislukte, en er is niets veranderd. ${error.message}`,
+        error: `Terugzetten mislukte, en er is niets veranderd. ${explain(error)}`,
       },
       { status: 503, headers: { 'cache-control': 'no-store' } },
     );

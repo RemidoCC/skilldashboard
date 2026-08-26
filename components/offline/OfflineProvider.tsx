@@ -77,7 +77,14 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
       // Edits first: a completion may refer to a task that only exists in the
       // mutation queue, and sending it after would fail on a missing row.
       const edits = await flushMutations();
-      const report = await flush();
+      // And if an edit is stuck, the completions wait with it. Going ahead
+      // regardless is how a completion overtakes the task it names, comes back
+      // "Deze taak bestaat niet meer", and gets parked as permanently failed —
+      // when all that was wrong was the order it arrived in.
+      const report =
+        edits.remaining > 0
+          ? { sent: 0, dropped: 0, remaining: (await readPending()).length }
+          : await flush();
       await collectFailures();
       await refreshPending();
       // Anything that landed changes what the server would render.

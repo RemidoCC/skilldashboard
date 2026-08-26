@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { asUser } from './support/db';
 import { randomUUID } from 'node:crypto';
 import { xpNeeded } from '@/lib/domain/curve';
 
@@ -44,9 +45,13 @@ run('log_completion', () => {
   });
 
   async function complete(entryId: string, xp: number) {
-    const { rows } = await db.query(
-      `select * from public.log_completion($1, $2, null, 'test', $3, null, null, 'manual', now())`,
-      [entryId, skillId, xp],
+    // As the browser: PostgREST runs every RPC as `authenticated`, so the
+    // function grants and RLS are both in play.
+    const { rows } = await asUser(db, () =>
+      db.query(
+        `select * from public.log_completion($1, $2, null, 'test', $3, null, null, 'manual', now())`,
+        [entryId, skillId, xp],
+      ),
     );
     return rows[0];
   }
@@ -125,7 +130,7 @@ run('log_completion', () => {
     for (const xp of [120, 340, 90, 1500, 45]) await complete(randomUUID(), xp);
     const before = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
 
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const after = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
 
     expect(after.rows[0]).toEqual(before.rows[0]);

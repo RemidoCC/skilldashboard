@@ -12,10 +12,14 @@ grant all on all tables in schema public to service_role;
 
 grant execute on all functions in schema public to authenticated, service_role;
 
+-- apply_xp lives in `internal` since 0012, precisely so that a blanket grant
+-- like the one above cannot reach it. Mirror that here rather than granting
+-- the schema away again, or the harness would be more permissive than
+-- production and the test would pass for the wrong reason.
+
 -- The migrations revoke on top of this; re-apply those so ordering cannot
 -- quietly hand the client something a migration took away.
 revoke execute on function public.seed_default_skills(uuid) from public, anon, authenticated;
-revoke execute on function public.apply_xp(uuid, int) from public, anon, authenticated;
 revoke select on public.integration_accounts from authenticated, anon;
 grant select (user_id, provider, scopes, connected_at)
   on public.integration_accounts to authenticated;

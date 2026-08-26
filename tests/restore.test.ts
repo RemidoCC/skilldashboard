@@ -540,4 +540,166 @@ run('restore_account', () => {
     await db.query(`select set_config('request.jwt.claim.sub', '', false)`);
     await expect(restore(payloadFor(file()))).rejects.toThrow(/Niet ingelogd/);
   });
+
+  it('rebuilds a fabricated floor from the ledger, like every other level', async () => {
+    // floor_level is what switches rust off: rustXpDelta returns 0 at or below
+    // it. Taking it from the file let a hand-edited export disable decay for a
+    // skill permanently, while level and xp were being rebuilt honestly.
+    const source = file();
+    const skills = source.skills as Record<string, unknown>[];
+    skills[0].level = 87;
+    skills[0].xp = 99999;
+    skills[0].floor_level = 95;
+
+    await restore(payloadFor(source));
+
+    const { rows } = await db.query(
+      `select level, xp, floor_level from public.skills where user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].level).not.toBe(87);
+    expect(rows[0].xp).not.toBe(99999);
+    expect(rows[0].floor_level, 'a floor the history never earned').not.toBe(95);
+  });
+
+  it('keeps a floor the restored ledger does support', async () => {
+    // 1902 XP is enough to cross level five, which is where a floor is claimed.
+    const source = file({
+      logEntries: [
+        {
+          id: randomUUID(),
+          skill_id: SKILL,
+          task_id: TASK,
+          title: 'Oefenen',
+          xp: 1902,
+          minutes: null,
+          note: null,
+          source: 'manual',
+          created_at: '2026-02-01T10:00:00Z',
+        },
+      ],
+    });
+    (source.skills as Record<string, unknown>[])[0].floor_level = 0;
+
+    await restore(payloadFor(source));
+
+    const { rows } = await db.query(
+      `select level, floor_level from public.skills where user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].level).toBeGreaterThanOrEqual(5);
+    expect(rows[0].floor_level).toBe(5);
+  });
+
+});
+
+describe('checkRestore and the ranges the database also enforces', () => {
+  const skill = {
+    id: '11111111-1111-1111-1111-111111111111',
+    name: 'Werk',
+    color: '#5C7A99',
+    glyph: 'square',
+    level: 3,
+    xp: 40,
+    floor_level: 0,
+    active: true,
+    sort_order: 1,
+    created_at: '2026-01-01T00:00:00Z',
+  };
+  const file = (over: Record<string, unknown>) => ({
+    schema: 'skill-unit/2',
+    skills: [skill],
+    ...over,
+  });
+  const refusal = (payload: unknown) => {
+    const out = checkRestore(payload);
+    return out.ok ? null : out.error;
+  };
+
+  it('names the row for a task value the column would refuse', () => {
+    const error = refusal(
+      file({
+        tasks: [{
+          id: '22222222-2222-2222-2222-222222222222',
+          skill_id: skill.id, title: 'Mail', kind: 'check', value: 9999,
+          on_today: false, archived: false, created_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    );
+    expect(error).toBe('tasks, rij 1: value moet tussen 5 en 150 liggen, en is 9999.');
+    // Not the constraint name the database would have given.
+    expect(error).not.toMatch(/check constraint|tasks_value_check/);
+  });
+
+  it('refuses a task value below the floor as well', () => {
+    const error = refusal(
+      file({
+        tasks: [{
+          id: '22222222-2222-2222-2222-222222222222',
+          skill_id: skill.id, title: 'Mail', kind: 'check', value: 1,
+          on_today: false, archived: false, created_at: '2026-01-01T00:00:00Z',
+        }],
+      }),
+    );
+    expect(error).toMatch(/tasks, rij 1: value moet tussen 5 en 150 liggen/);
+  });
+
+  it('refuses a level below one', () => {
+    expect(refusal(file({ skills: [{ ...skill, level: 0 }] }))).toBe(
+      'skills, rij 1: level mag niet lager zijn dan 1, en is 0.',
+    );
+  });
+
+  it('refuses negative xp and a negative floor', () => {
+    expect(refusal(file({ skills: [{ ...skill, xp: -5 }] }))).toMatch(/xp mag niet lager zijn dan 0/);
+    expect(refusal(file({ skills: [{ ...skill, floor_level: -1 }] }))).toMatch(
+      /floor_level mag niet lager zijn dan 0/,
+    );
+  });
+
+  it('refuses a quest target of zero', () => {
+    expect(
+      refusal(
+        file({
+          quests: [{
+            id: '33333333-3333-3333-3333-333333333333',
+            skill_id: skill.id, title: 'niets', target: 0, progress: 0,
+            bonus_xp: 40, week_start: '2026-01-05', completed_at: null,
+          }],
+        }),
+      ),
+    ).toMatch(/target mag niet lager zijn dan 1/);
+  });
+
+  it('refuses a season that ends before it starts', () => {
+    expect(
+      refusal(
+        file({
+          seasons: [{
+            id: '44444444-4444-4444-4444-444444444444',
+            name: 'S01', starts_on: '2026-03-29', ends_on: '2026-01-05',
+            badge_slug: '', summary: null,
+          }],
+        }),
+      ),
+    ).toBe('seasons, rij 1: het seizoen eindigt op 2026-01-05, en dat is niet na 2026-03-29.');
+  });
+
+  it('still accepts the values the database is happy with', () => {
+    const out = checkRestore(
+      file({
+        tasks: [{
+          id: '22222222-2222-2222-2222-222222222222',
+          skill_id: skill.id, title: 'Mail', kind: 'check', value: 150,
+          on_today: false, archived: false, created_at: '2026-01-01T00:00:00Z',
+        }],
+        seasons: [{
+          id: '44444444-4444-4444-4444-444444444444',
+          name: 'S01', starts_on: '2026-01-05', ends_on: '2026-03-29',
+          badge_slug: '', summary: null,
+        }],
+      }),
+    );
+    expect(out.ok).toBe(true);
+  });
 });

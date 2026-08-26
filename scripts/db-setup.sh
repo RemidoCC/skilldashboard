@@ -38,6 +38,7 @@ psql "$CONN dbname=$DB" -v ON_ERROR_STOP=1 -q \
   -f supabase/migrations/0009_revert_completion.sql \
   -f supabase/migrations/0010_encrypted_token.sql \
   -f supabase/migrations/0011_restore_account.sql \
+  -f supabase/migrations/0012_write_path_repair.sql \
   -f supabase/tests/grants.sql
 
 echo "postgresql:///$DB?host=$SOCKET_DIR&port=$PORT&user=postgres"

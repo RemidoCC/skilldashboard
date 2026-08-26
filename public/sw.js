@@ -189,6 +189,18 @@ function remove(database, id) {
   });
 }
 
+/* Must match MAX_ATTEMPTS in lib/offline/queue.ts. */
+const MAX_ATTEMPTS = 8;
+
+function bumpAttempts(database, item, attempts) {
+  return new Promise((resolve, reject) => {
+    const tx = database.transaction(QUEUE_STORE, 'readwrite');
+    tx.objectStore(QUEUE_STORE).put({ ...item, attempts });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 function removeMutation(database, queueId) {
   return new Promise((resolve, reject) => {
     const tx = database.transaction(MUTATION_STORE, 'readwrite');
@@ -238,6 +250,7 @@ function describeMutation(mutation) {
 async function drainMutations(database) {
   let sent = 0;
   let parked = 0;
+  let blocked = false;
 
   for (const item of await readMutations(database)) {
     let response;
@@ -269,10 +282,13 @@ async function drainMutations(database) {
       continue;
     }
 
-    break; // Server trouble. Stop so the order holds.
+    // Server trouble. Stop so the order holds, and say so, because the
+    // completions behind this edit have to wait too.
+    blocked = true;
+    break;
   }
 
-  return { sent, parked };
+  return { sent, parked, blocked };
 }
 
 /* Must produce the same body as lib/offline/types.ts toRequestBody. */
@@ -300,9 +316,22 @@ function toBody(item) {
 async function drainQueue() {
   const database = await openQueue();
   const edits = await drainMutations(database);
-  const items = await readAll(database);
   let sent = edits.sent;
   let parked = edits.parked;
+
+  // A blocked edit holds the completions back too. A completion can name a
+  // task that so far only exists in the edit queue; sending it while that edit
+  // is still stuck gets it refused as a missing row and parked for good, which
+  // loses a write that was only early.
+  if (edits.blocked) {
+    if ((sent > 0 || parked > 0) && typeof BroadcastChannel !== 'undefined') {
+      new BroadcastChannel(SYNC_CHANNEL).postMessage({ type: 'drained', sent, parked });
+    }
+    // Still work to do: throwing keeps the sync registration alive.
+    throw new Error('edits pending');
+  }
+
+  const items = await readAll(database);
 
   for (const item of items) {
     let response;
@@ -333,7 +362,16 @@ async function drainQueue() {
       continue;
     }
 
-    // 5xx: leave it queued and try again later.
+    // 5xx: leave it queued and try again later, but not forever — a write the
+    // server keeps refusing has to become visible instead of cycling.
+    const attempts = (item.attempts || 0) + 1;
+    if (attempts >= MAX_ATTEMPTS) {
+      await park(database, item, 'De server bleef deze registratie weigeren. Hij is niet opgeslagen.');
+      await remove(database, item.id);
+      parked += 1;
+      continue;
+    }
+    await bumpAttempts(database, item, attempts);
   }
 
   if ((sent > 0 || parked > 0) && typeof BroadcastChannel !== 'undefined') {

@@ -29,7 +29,15 @@ export function isReportAvailable(now: Date, timeZone = 'Europe/Amsterdam'): boo
  *
  * Used as the dismissal key, so dismissing Sunday's report does not also
  * dismiss next week's.
+ *
+ * Whether it is Monday is derived from the day key rather than taken as an
+ * argument. The caller used `new Date().getDay() === 1`, which reads the
+ * server's clock: on a UTC host, Amsterdam's Monday between 00:00 and 02:00 is
+ * still Sunday there, so the key pointed at the week that was starting instead
+ * of the one that had ended. A day key already carries the right timezone, and
+ * a Monday is simply a day that is its own week start.
  */
-export function reportKey(today: string, isMonday: boolean): string {
-  return isMonday ? addDays(weekStart(today), -7) : weekStart(today);
+export function reportKey(today: string): string {
+  const monday = weekStart(today);
+  return monday === today ? addDays(monday, -7) : monday;
 }

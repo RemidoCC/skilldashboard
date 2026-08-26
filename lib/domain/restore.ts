@@ -38,6 +38,9 @@ interface ColumnSpec {
   nullable?: boolean;
   /** The database has a check constraint; catching it here gives a readable message. */
   oneOf?: readonly string[];
+  /** Inclusive bounds the database also enforces, for the same reason. */
+  min?: number;
+  max?: number;
 }
 
 export interface TableSpec {
@@ -52,6 +55,11 @@ export interface TableSpec {
   taskRefs?: readonly string[];
   /** False for the one table keyed by something other than id. */
   hasId?: boolean;
+  /**
+   * A constraint that spans two columns, so it cannot live on either. Returns
+   * the sentence to refuse with, or null when the row is fine.
+   */
+  rowCheck?: (row: Record<string, JsonValue>) => string | null;
   /** Column the export sorts on, so two exports of the same account match. */
   orderBy: string;
 }
@@ -77,9 +85,9 @@ export const TABLES: readonly TableSpec[] = [
       subtitle: { type: 'text', nullable: true },
       color: text,
       glyph: text,
-      level: int,
-      xp: int,
-      floor_level: int,
+      level: { type: 'int', min: 1 },
+      xp: { type: 'int', min: 0 },
+      floor_level: { type: 'int', min: 0 },
       last_active_at: { type: 'ts', nullable: true },
       active: bool,
       sort_order: int,
@@ -95,7 +103,7 @@ export const TABLES: readonly TableSpec[] = [
       skill_id: uuid,
       title: text,
       kind: { type: 'text', oneOf: ['check', 'timer'] },
-      value: int,
+      value: { type: 'int', min: 5, max: 150 },
       on_today: bool,
       archived: bool,
       created_at: ts,
@@ -132,7 +140,7 @@ export const TABLES: readonly TableSpec[] = [
       skill_id: uuid,
       title: text,
       target_date: { type: 'date', nullable: true },
-      progress: int,
+      progress: { type: 'int', min: 0 },
       done: bool,
       created_at: ts,
     },
@@ -146,9 +154,9 @@ export const TABLES: readonly TableSpec[] = [
       id: uuid,
       skill_id: uuid,
       title: text,
-      target: int,
-      progress: int,
-      bonus_xp: int,
+      target: { type: 'int', min: 1 },
+      progress: { type: 'int', min: 0 },
+      bonus_xp: { type: 'int', min: 0 },
       week_start: { type: 'date' },
       completed_at: { type: 'ts', nullable: true },
     },
@@ -166,6 +174,12 @@ export const TABLES: readonly TableSpec[] = [
       badge_slug: text,
       summary: { type: 'json', nullable: true },
     },
+    rowCheck: (row) =>
+      typeof row.starts_on === 'string' &&
+      typeof row.ends_on === 'string' &&
+      row.ends_on <= row.starts_on
+        ? `het seizoen eindigt op ${row.ends_on}, en dat is niet na ${row.starts_on}.`
+        : null,
   },
   {
     key: 'weekSettings',
@@ -284,12 +298,25 @@ function checkColumn(spec: ColumnSpec, raw: unknown, where: string): ColumnCheck
       return good(raw);
     }
 
-    case 'int':
+    case 'int': {
       if (typeof raw !== 'number' || !Number.isInteger(raw)) {
         return wrong(`${where} moet een geheel getal zijn.`);
       }
       if (!Number.isSafeInteger(raw)) return wrong(`${where} is te groot.`);
+      // The database has check constraints on several of these. Catching them
+      // here is the difference between naming the table and the row and
+      // handing the reader `violates check constraint "tasks_value_check"`.
+      if (spec.min !== undefined && spec.max !== undefined && (raw < spec.min || raw > spec.max)) {
+        return wrong(`${where} moet tussen ${spec.min} en ${spec.max} liggen, en is ${raw}.`);
+      }
+      if (spec.min !== undefined && raw < spec.min) {
+        return wrong(`${where} mag niet lager zijn dan ${spec.min}, en is ${raw}.`);
+      }
+      if (spec.max !== undefined && raw > spec.max) {
+        return wrong(`${where} mag niet hoger zijn dan ${spec.max}, en is ${raw}.`);
+      }
       return good(raw);
+    }
 
     case 'bool':
       if (typeof raw !== 'boolean') return wrong(`${where} moet waar of onwaar zijn.`);
@@ -363,6 +390,9 @@ export function checkRestore(payload: unknown): RestoreCheck {
         if (!checked.ok) return { ok: false, error: checked.error };
         row[column] = checked.value;
       }
+
+      const rowProblem = spec.rowCheck?.(row);
+      if (rowProblem) return { ok: false, error: `${at}: ${rowProblem}` };
 
       if (spec.hasId !== false) {
         const id = String(row.id);

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { asService, asUser } from './support/db';
 import { randomUUID } from 'node:crypto';
 import { xpNeeded } from '@/lib/domain/curve';
 
@@ -51,13 +52,20 @@ run('revert_completion', () => {
   });
 
   async function complete(id: string, xp = 40, source = 'manual', at = DURING) {
-    await db.query(
-      `select public.log_completion($1, $2, null, 'werk', $3, null, null, $4, $5)`,
-      [id, skillId, xp, source, at],
-    );
+    // A rust entry is written by the scheduled job, which holds the service
+    // role and no session; everything else is the user tapping something.
+    const call = () =>
+      db.query(
+        `select public.log_completion($1, $2, null, 'werk', $3, null, null, $4, $5, $6)`,
+        [id, skillId, xp, source, at, userId],
+      );
+    if (source === 'rust') await asService(db, call);
+    else await asUser(db, call);
   }
 
-  const revert = (id: string) => db.query(`select public.revert_completion($1)`, [id]);
+  // Reverting is something the user does, so it runs as the user.
+  const revert = (id: string) =>
+    asUser(db, () => db.query(`select public.revert_completion($1)`, [id]));
   const skill = async () =>
     (await db.query(`select level, xp, floor_level, last_active_at from public.skills where id = $1`, [skillId])).rows[0];
   const entries = async () =>
@@ -237,7 +245,7 @@ run('revert_completion', () => {
     await revert(ids[1]);
 
     const before = await skill();
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const after = await skill();
 
     expect({ level: after.level, xp: after.xp }).toEqual({

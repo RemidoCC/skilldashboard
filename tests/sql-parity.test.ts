@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { asUser } from './support/db';
 import { rebuild, xpNeeded } from '@/lib/domain/curve';
 import { applyRust, rustXpDelta } from '@/lib/domain/rust';
 
@@ -28,6 +29,9 @@ run('SQL and TypeScript agree on the level curve', () => {
       [`parity-${Date.now()}@test.local`],
     );
     userId = rows[0].id;
+    // recalculate_levels runs as `authenticated` here, the way it does through
+    // revert and restore, so RLS has to be able to resolve who is asking.
+    await db.query(`select set_config('request.jwt.claim.sub', $1, false)`, [userId]);
   });
 
   afterAll(async () => {
@@ -84,7 +88,7 @@ run('SQL and TypeScript agree on the level curve', () => {
         [userId, skillId, gains],
       );
 
-      await db.query(`select public.recalculate_levels($1)`, [userId]);
+      await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
 
       const { rows: after } = await db.query<{
         level: number;
@@ -115,9 +119,9 @@ run('SQL and TypeScript agree on the level curve', () => {
       [userId, skillId, [500, 700, 900, 1100]],
     );
 
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const first = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const second = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
 
     expect(second.rows[0]).toEqual(first.rows[0]);
@@ -144,7 +148,7 @@ run('SQL and TypeScript agree on the level curve', () => {
          from unnest($3::int[]) with ordinality as t(g, ord)`,
       [userId, skillId, [...climb, decay]],
     );
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
 
     const after = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
     const expected = applyRust(earned);
@@ -169,7 +173,7 @@ run('SQL and TypeScript agree on the level curve', () => {
        values ($1, $2, 'a', 50, 'manual', now()), ($1, $2, 'r', -9999, 'rust', now() + interval '1 minute')`,
       [userId, skillId],
     );
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const after = await db.query(`select level, xp from public.skills where id = $1`, [skillId]);
     expect(after.rows[0]).toEqual({ level: 1, xp: 0 });
   });
@@ -185,11 +189,11 @@ run('SQL and TypeScript agree on the level curve', () => {
        values ($1, $2, 'big', 1902, 'manual')`,
       [userId, skillId],
     );
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     expect((await db.query(`select floor_level from public.skills where id = $1`, [skillId])).rows[0].floor_level).toBe(5);
 
     await db.query(`delete from public.log_entries where skill_id = $1`, [skillId]);
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
 
     const after = await db.query(`select level, xp, floor_level from public.skills where id = $1`, [skillId]);
     expect(after.rows[0].level).toBe(1);

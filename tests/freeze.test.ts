@@ -137,3 +137,33 @@ describe('freezeToGrant', () => {
     expect(freezeToGrant(['2026-08-24', '2026-08-01'], [], week)).toBeNull();
   });
 });
+
+describe('freezeToSpend and a gap that has already broken the streak', () => {
+  const held: Freeze[] = [{ id: 'f1', earnedWeek: '2026-08-10', spentOn: null }];
+
+  it('covers yesterday when the day before it was worked', () => {
+    const days = new Set(['2026-08-17', '2026-08-18']);
+    expect(freezeToSpend(days, held, '2026-08-20')).toBe('2026-08-19');
+  });
+
+  it('covers yesterday when the day before it was itself frozen', () => {
+    const days = new Set(['2026-08-17']);
+    const chain: Freeze[] = [
+      { id: 'f0', earnedWeek: '2026-08-03', spentOn: '2026-08-18' },
+      { id: 'f1', earnedWeek: '2026-08-10', spentOn: null },
+    ];
+    expect(freezeToSpend(days, chain, '2026-08-20')).toBe('2026-08-19');
+  });
+
+  it('spends nothing once the gap is two days wide', () => {
+    // Worked through Monday the 17th, missed Tuesday and Wednesday, and the
+    // daily job did not run on Wednesday. The streak died on Tuesday; a freeze
+    // spent on Wednesday would be thrown away for nothing.
+    const days = new Set(['2026-08-15', '2026-08-16', '2026-08-17']);
+    expect(freezeToSpend(days, held, '2026-08-20')).toBe(null);
+  });
+
+  it('still refuses to start a streak from nothing', () => {
+    expect(freezeToSpend(new Set<string>(), held, '2026-08-20')).toBe(null);
+  });
+});

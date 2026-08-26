@@ -35,3 +35,35 @@ export function daysFromEntries(
     entries.filter((e) => e.source !== 'rust').map((e) => dayKey(e.createdAt)),
   );
 }
+
+/**
+ * The longest unbroken run inside a window, in days.
+ *
+ * Used by the season summary, which reports a fact about a stretch that is
+ * already over rather than the run ending today. Days covered by a spent
+ * freeze count, because that is what the app showed at the time — a summary
+ * that contradicted the screen would be worse than no summary.
+ */
+export function longestRun(
+  entryDays: Iterable<string>,
+  coveredDays: Iterable<string> = [],
+  from?: string,
+  to?: string,
+): number {
+  const all = new Set<string>([...entryDays, ...coveredDays]);
+  const days = [...all]
+    .filter((day) => (from === undefined || day >= from) && (to === undefined || day <= to))
+    .sort();
+
+  let longest = 0;
+  let run = 0;
+  let previous: string | null = null;
+
+  for (const day of days) {
+    run = previous !== null && addDays(previous, 1) === day ? run + 1 : 1;
+    if (run > longest) longest = run;
+    previous = day;
+  }
+
+  return longest;
+}

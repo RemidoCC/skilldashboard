@@ -237,7 +237,7 @@ export async function loadVandaag(): Promise<VandaagData> {
     quests,
     goals,
     report,
-    reportKey: reportKey(today, new Date().getDay() === 1),
+    reportKey: reportKey(today),
     nextCapacity: toCapacity(nextWeekRes.data?.capacity),
     freezes,
     frozenDays: streak.frozenDays,

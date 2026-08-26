@@ -93,8 +93,18 @@ export function freezeToSpend(
   if (freezes.some((f) => f.spentOn === yesterday)) return null;
   if (heldFreezes(freezes).length === 0) return null;
 
+  // The day before the gap has to be covered, or the streak was already broken
+  // and there is nothing left to protect. Without this the job spends a freeze
+  // on a gap it cannot close — which is what happens the first time it runs
+  // after missing a day, because resolveStreak walks past an empty day to find
+  // an older run.
+  const dayBefore = addDays(yesterday, -1);
+  const covered =
+    days.has(dayBefore) || freezes.some((f) => f.spentOn === dayBefore);
+  if (!covered) return null;
+
   // Was anything actually running before the gap?
-  const before = resolveStreak(days, freezes, addDays(yesterday, -1));
+  const before = resolveStreak(days, freezes, dayBefore);
   return before.days > 0 ? yesterday : null;
 }
 

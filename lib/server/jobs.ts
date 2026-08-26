@@ -6,7 +6,7 @@ import { toCapacity, toLogEntry, toSkill } from '@/lib/data/map';
 import { dayKey, weekStart } from '@/lib/domain/dates';
 import { rustXpDelta, shouldRust } from '@/lib/domain/rust';
 import { freezeToGrant, freezeToSpend, type Freeze } from '@/lib/domain/freeze';
-import { daysFromEntries } from '@/lib/domain/streak';
+import { daysFromEntries, longestRun } from '@/lib/domain/streak';
 import { buildCandidates, generateQuests } from '@/lib/domain/quests';
 import {
   badgeSlug,
@@ -19,7 +19,7 @@ import {
   seasonSummary,
   type SeasonTally,
 } from '@/lib/domain/season';
-import { levelTrajectory } from '@/lib/domain/trajectory';
+import { levelTrajectory, recoveredWithin } from '@/lib/domain/trajectory';
 import type { Database, Json } from '@/lib/db/database.types';
 import type { Capacity, LogEntry, Skill } from '@/lib/domain/types';
 
@@ -95,19 +95,17 @@ export async function runRust(db: Admin, account: Account): Promise<string[]> {
       p_note: null,
       p_source: 'rust',
       p_created_at: new Date().toISOString(),
+      // A cron run holds the service role, which carries no `sub` claim, so
+      // auth.uid() inside the function is null. Without naming the account
+      // here the call is refused with 'Niet ingelogd.' and decay silently
+      // never happens.
+      p_user: account.userId,
     });
 
     if (error) {
       changes.push(`${skill.name}: roest mislukte (${error.message})`);
       continue;
     }
-
-    // log_completion stamps last_active_at, which would make the skill look
-    // fresh. Rust is not activity, so put it back where it was.
-    await db
-      .from('skills')
-      .update({ last_active_at: skill.lastActiveAt })
-      .eq('id', skill.id);
 
     changes.push(`${skill.name} roestte naar niveau ${skill.level - 1}`);
   }
@@ -137,18 +135,25 @@ export async function runFreezes(db: Admin, account: Account): Promise<string[]>
 
   const earned = freezeToGrant(days, freezes, weekStart(account.today));
   if (earned !== null) {
-    const { error } = await db
+    // Ask for the row back rather than only whether it landed. Without the real
+    // id the freeze could not be spent in the same run, and the run that grants
+    // one is exactly the run that tends to need it: a week worked through,
+    // Sunday missed, the job firing on Monday. It fell through to "no freeze
+    // held" and the streak broke with one sitting unused.
+    const { data, error } = await db
       .from('streak_freezes')
-      .insert({ user_id: account.userId, earned_week: earned });
-    if (!error) {
+      .insert({ user_id: account.userId, earned_week: earned })
+      .select('id')
+      .single();
+    if (!error && data) {
       changes.push(`Freeze verdiend voor de week van ${earned}`);
-      freezes.push({ id: 'new', earnedWeek: earned, spentOn: null });
+      freezes.push({ id: data.id, earnedWeek: earned, spentOn: null });
     }
   }
 
   const due = freezeToSpend(days, freezes, account.today);
   if (due !== null) {
-    const held = freezes.find((f) => f.spentOn === null && f.id !== 'new');
+    const held = freezes.find((f) => f.spentOn === null);
     if (held) {
       const { error } = await db
         .from('streak_freezes')
@@ -290,8 +295,10 @@ async function closeSeason(
       name: skill.name,
       xp,
       levelsGained: Math.max((line?.to ?? 1) - (line?.from ?? 1), 0),
-      // Dipped below its peak inside the season and climbed back out.
-      recovered: (line?.peak ?? 1) > (line?.from ?? 1) && (line?.to ?? 1) >= (line?.peak ?? 1),
+      // Dipped below its peak inside the season and climbed back out. The test
+      // lives in the domain because getting it wrong here is invisible: it
+      // does not throw, it just hands every season the same badge.
+      recovered: line ? recoveredWithin(line) : false,
     };
   });
 
@@ -303,8 +310,19 @@ async function closeSeason(
     .lte('week_start', season.ends_on)
     .not('completed_at', 'is', null);
 
+  // The longest run the season actually held, counting days a freeze carried,
+  // so the summary agrees with what Vandaag showed at the time. This used to
+  // be passed as a literal zero, which reported a fact nobody had measured.
+  const freezes = await loadFreezes(db, account.userId);
+  const longest = longestRun(
+    daysFromEntries(account.entries),
+    freezes.map((f) => f.spentOn).filter((d): d is string => d !== null),
+    season.starts_on,
+    season.ends_on,
+  );
+
   const theme = badgeTheme(tallies);
-  const summary = seasonSummary(tallies, count ?? 0, 0);
+  const summary = seasonSummary(tallies, count ?? 0, longest);
 
   const { error } = await db
     .from('seasons')

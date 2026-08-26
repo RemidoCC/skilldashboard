@@ -28,11 +28,11 @@ export function timerXp(minutes: number, value: number): number {
   return earned;
 }
 
-/** The streak bonus tops out at 20 days, i.e. +20%. */
-export const MAX_STREAK_BONUS_DAYS = 20;
+/** The streak bonus tops out at 30 days, i.e. +30%. */
+export const MAX_STREAK_BONUS_DAYS = 30;
 
 /**
- *   earned = round(base * (1 + min(streak_days, 20) / 100))
+ *   earned = round(base * (1 + min(streak_days, 30) / 100))
  */
 export function withStreakBonus(base: number, streakDays: number): number {
   const capped = Math.min(Math.max(streakDays, 0), MAX_STREAK_BONUS_DAYS);

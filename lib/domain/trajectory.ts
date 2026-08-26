@@ -136,6 +136,38 @@ export function levelTrajectory(
   });
 }
 
+/**
+ * Whether a skill fell back inside the window and climbed out again.
+ *
+ * This is what the season badge `hersteld` is supposed to mean, and it needs a
+ * dip to be true. The first cut asked `peak > from && to >= peak`, which is
+ * satisfied by any skill that simply went up and stayed there — so every
+ * season with a single level gained in it read as a comeback, and the honest
+ * words for a lopsided or a balanced season became unreachable.
+ *
+ * A dip means a day whose level is below the highest the skill had already
+ * reached in the window. Climbing out means ending at or above that high
+ * point. Since a level only ever falls through a rust entry or a reverted one,
+ * this cannot be true of a skill that only ever gained.
+ */
+export function recoveredWithin(line: {
+  from: number;
+  points: readonly TrajectoryPoint[];
+}): boolean {
+  if (line.points.length === 0) return false;
+
+  let peak = line.from;
+  let dipped = false;
+
+  for (const point of line.points) {
+    if (point.level < peak) dipped = true;
+    if (point.level > peak) peak = point.level;
+  }
+
+  const last = line.points[line.points.length - 1].level;
+  return dipped && last >= peak;
+}
+
 export interface LogDay {
   day: string;
   entries: LogEntry[];

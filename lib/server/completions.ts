@@ -40,6 +40,31 @@ function cleanNote(note: unknown): string | null {
   return trimmed === '' ? null : trimmed.slice(0, 280);
 }
 
+/**
+ * Postgres codes that mean "this write can never land", whatever we do.
+ *
+ * The queue keeps a 5xx and drops a 4xx, so calling everything retryable made
+ * a permanent failure invisible: it never parked, never reported, and cycled
+ * for as long as the app was open. A missing privilege or a violated
+ * constraint will say the same thing on the thousandth attempt as on the
+ * first. Anything not listed here still counts as worth retrying, because a
+ * write that might yet succeed must not be thrown away.
+ */
+const PERMANENT_CODES = new Set([
+  '42501', // insufficient_privilege, and the 'Niet ingelogd.' raise
+  '42883', // undefined_function
+  '42P01', // undefined_table
+  '23502', // not_null_violation
+  '23503', // foreign_key_violation
+  '23514', // check_violation
+  '22023', // invalid_parameter_value — 'Onbekende vaardigheid.'
+  '22P02', // invalid_text_representation
+]);
+
+function isRetryable(error: { code?: string | null }): boolean {
+  return !(error.code && PERMANENT_CODES.has(error.code));
+}
+
 /** Streaks are worth XP, so the server works them out rather than trusting the client. */
 async function currentStreak(supabase: Client, today: string): Promise<number> {
   const { data, error } = await supabase
@@ -87,7 +112,11 @@ async function write(
   });
 
   if (error) {
-    return { ok: false, error: `Opslaan mislukte: ${error.message}`, retryable: true };
+    return {
+      ok: false,
+      error: `Opslaan mislukte: ${error.message}`,
+      retryable: isRetryable(error),
+    };
   }
   if (!after) {
     return {

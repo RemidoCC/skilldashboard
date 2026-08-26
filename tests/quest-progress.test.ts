@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
+import { asService, asUser } from './support/db';
 import { randomUUID } from 'node:crypto';
 
 /**
@@ -60,10 +61,15 @@ run('quest progress', () => {
   });
 
   async function complete(entryId: string, opts: { skill?: string; source?: string; at?: string } = {}) {
-    await db.query(
-      `select * from public.log_completion($1, $2, null, 'werk', 40, null, null, $3, $4)`,
-      [entryId, opts.skill ?? skillId, opts.source ?? 'manual', opts.at ?? DURING],
-    );
+    const source = opts.source ?? 'manual';
+    const call = () =>
+      db.query(
+        `select * from public.log_completion($1, $2, null, 'werk', 40, null, null, $3, $4, $5)`,
+        [entryId, opts.skill ?? skillId, source, opts.at ?? DURING, userId],
+      );
+    // Rust comes from the cron, which has no session; the rest is the user.
+    if (source === 'rust') await asService(db, call);
+    else await asUser(db, call);
   }
 
   const quest = async () =>
@@ -142,7 +148,7 @@ run('quest progress', () => {
     for (let i = 0; i < 3; i += 1) await complete(randomUUID());
     const before = await db.query(`select level, xp from public.skills where id = $1`, [skillId]);
 
-    await db.query(`select public.recalculate_levels($1)`, [userId]);
+    await asUser(db, () => db.query(`select public.recalculate_levels($1)`, [userId]));
     const after = await db.query(`select level, xp from public.skills where id = $1`, [skillId]);
 
     expect(after.rows[0]).toEqual(before.rows[0]);

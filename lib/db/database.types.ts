@@ -262,17 +262,13 @@ export type Database = {
     Views: Record<never, never>;
     Functions: {
       recalculate_levels: {
-        Args: { p_user: string; p_rebuild_floors?: boolean };
+        Args: { p_user: string; p_rebuild_floors?: boolean; p_skill?: string | null };
         Returns: undefined;
       };
       revert_completion: { Args: { p_entry: string }; Returns: undefined };
       restore_account: { Args: { p_payload: Json }; Returns: undefined };
       seed_default_skills: { Args: { p_user: string }; Returns: undefined };
       xp_needed: { Args: { p_level: number }; Returns: number };
-      apply_xp: {
-        Args: { p_skill: string; p_gain: number };
-        Returns: Database['public']['Tables']['skills']['Row'];
-      };
       log_completion: {
         Args: {
           p_id: string;
@@ -284,6 +280,8 @@ export type Database = {
           p_note: string | null;
           p_source: string;
           p_created_at: string | null;
+          /** Only read when auth.uid() is null, i.e. a scheduled job. */
+          p_user?: string | null;
         };
         Returns: Database['public']['Tables']['skills']['Row'];
       };
